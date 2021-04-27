@@ -9,7 +9,6 @@ import './index.css'
 
 const EXAMPLES = [
   { id: 'citygrid', name: 'City', component: CityGrid, disableXR: true }, //fps too low for vr, too many draw calls
-
 ]
 
 class ExamplesApp extends React.Component {

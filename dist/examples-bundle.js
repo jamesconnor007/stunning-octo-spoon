@@ -1,6 +1,12 @@
 (function () {
 	'use strict';
 
+	var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+
+	function unwrapExports (x) {
+		return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
+	}
+
 	function createCommonjsModule(fn, module) {
 		return module = { exports: {} }, fn(module, module.exports), module.exports;
 	}
@@ -156,8 +162,8 @@
 	  module.exports = react_production_min;
 	}
 	});
-	react.Component;
-	react.cloneElement;
+	var react_1 = react.Component;
+	var react_2 = react.cloneElement;
 
 	var scheduler_production_min = createCommonjsModule(function (module, exports) {
 	var f,g,h,k,l;
@@ -712,6 +718,36 @@
 	    return id
 	  }
 	})();
+
+
+	/**
+	 * Create a function that memoizes the result of another function based on the most
+	 * recent call's arguments and `this`. The arguments are compared using strict shallow equality.
+	 * @param {function} fn
+	 * @return {function}
+	 */
+	function memoize(fn) {
+	  var prevArgs, prevThis, prevResult;
+	  return function() {
+	    var arguments$1 = arguments;
+
+	    var changed = !prevArgs || this !== prevThis || arguments.length !== prevArgs.length;
+	    if (!changed) {
+	      for (var i = 0, len = arguments.length; i < len; i++) {
+	        if (arguments$1[i] !== prevArgs[i]) {
+	          changed = true;
+	          break
+	        }
+	      }
+	    }
+	    if (changed) {
+	      prevArgs = Array.prototype.slice.call(arguments);
+	      prevThis = this;
+	      prevResult = fn.apply(this, arguments);
+	    }
+	    return prevResult
+	  }
+	}
 
 
 	/**
@@ -31047,6 +31083,93 @@
 
 	CanvasTexture.prototype.isCanvasTexture = true;
 
+	var CircleGeometry = /*@__PURE__*/(function (BufferGeometry) {
+		function CircleGeometry( radius, segments, thetaStart, thetaLength ) {
+			if ( radius === void 0 ) radius = 1;
+			if ( segments === void 0 ) segments = 8;
+			if ( thetaStart === void 0 ) thetaStart = 0;
+			if ( thetaLength === void 0 ) thetaLength = Math.PI * 2;
+
+
+			BufferGeometry.call(this);
+
+			this.type = 'CircleGeometry';
+
+			this.parameters = {
+				radius: radius,
+				segments: segments,
+				thetaStart: thetaStart,
+				thetaLength: thetaLength
+			};
+
+			segments = Math.max( 3, segments );
+
+			// buffers
+
+			var indices = [];
+			var vertices = [];
+			var normals = [];
+			var uvs = [];
+
+			// helper variables
+
+			var vertex = new Vector3();
+			var uv = new Vector2();
+
+			// center point
+
+			vertices.push( 0, 0, 0 );
+			normals.push( 0, 0, 1 );
+			uvs.push( 0.5, 0.5 );
+
+			for ( var s = 0, i = 3; s <= segments; s ++, i += 3 ) {
+
+				var segment = thetaStart + s / segments * thetaLength;
+
+				// vertex
+
+				vertex.x = radius * Math.cos( segment );
+				vertex.y = radius * Math.sin( segment );
+
+				vertices.push( vertex.x, vertex.y, vertex.z );
+
+				// normal
+
+				normals.push( 0, 0, 1 );
+
+				// uvs
+
+				uv.x = ( vertices[ i ] / radius + 1 ) / 2;
+				uv.y = ( vertices[ i + 1 ] / radius + 1 ) / 2;
+
+				uvs.push( uv.x, uv.y );
+
+			}
+
+			// indices
+
+			for ( var i$1 = 1; i$1 <= segments; i$1 ++ ) {
+
+				indices.push( i$1, i$1 + 1, 0 );
+
+			}
+
+			// build geometry
+
+			this.setIndex( indices );
+			this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+			this.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
+			this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
+
+		}
+
+		if ( BufferGeometry ) CircleGeometry.__proto__ = BufferGeometry;
+		CircleGeometry.prototype = Object.create( BufferGeometry && BufferGeometry.prototype );
+		CircleGeometry.prototype.constructor = CircleGeometry;
+
+		return CircleGeometry;
+	}(BufferGeometry));
+
 	var CylinderGeometry = /*@__PURE__*/(function (BufferGeometry) {
 		function CylinderGeometry( radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength ) {
 			if ( radiusTop === void 0 ) radiusTop = 1;
@@ -33452,6 +33575,173 @@
 
 	ParametricGeometry.prototype = Object.create( BufferGeometry.prototype );
 	ParametricGeometry.prototype.constructor = ParametricGeometry;
+
+	var ShapeGeometry = /*@__PURE__*/(function (BufferGeometry) {
+		function ShapeGeometry( shapes, curveSegments ) {
+			if ( curveSegments === void 0 ) curveSegments = 12;
+
+
+			BufferGeometry.call(this);
+			this.type = 'ShapeGeometry';
+
+			this.parameters = {
+				shapes: shapes,
+				curveSegments: curveSegments
+			};
+
+			// buffers
+
+			var indices = [];
+			var vertices = [];
+			var normals = [];
+			var uvs = [];
+
+			// helper variables
+
+			var groupStart = 0;
+			var groupCount = 0;
+
+			// allow single and array values for "shapes" parameter
+
+			if ( Array.isArray( shapes ) === false ) {
+
+				addShape( shapes );
+
+			} else {
+
+				for ( var i = 0; i < shapes.length; i ++ ) {
+
+					addShape( shapes[ i ] );
+
+					this.addGroup( groupStart, groupCount, i ); // enables MultiMaterial support
+
+					groupStart += groupCount;
+					groupCount = 0;
+
+				}
+
+			}
+
+			// build geometry
+
+			this.setIndex( indices );
+			this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+			this.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
+			this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
+
+
+			// helper functions
+
+			function addShape( shape ) {
+
+				var indexOffset = vertices.length / 3;
+				var points = shape.extractPoints( curveSegments );
+
+				var shapeVertices = points.shape;
+				var shapeHoles = points.holes;
+
+				// check direction of vertices
+
+				if ( ShapeUtils.isClockWise( shapeVertices ) === false ) {
+
+					shapeVertices = shapeVertices.reverse();
+
+				}
+
+				for ( var i = 0, l = shapeHoles.length; i < l; i ++ ) {
+
+					var shapeHole = shapeHoles[ i ];
+
+					if ( ShapeUtils.isClockWise( shapeHole ) === true ) {
+
+						shapeHoles[ i ] = shapeHole.reverse();
+
+					}
+
+				}
+
+				var faces = ShapeUtils.triangulateShape( shapeVertices, shapeHoles );
+
+				// join vertices of inner and outer paths to a single array
+
+				for ( var i$1 = 0, l$1 = shapeHoles.length; i$1 < l$1; i$1 ++ ) {
+
+					var shapeHole$1 = shapeHoles[ i$1 ];
+					shapeVertices = shapeVertices.concat( shapeHole$1 );
+
+				}
+
+				// vertices, normals, uvs
+
+				for ( var i$2 = 0, l$2 = shapeVertices.length; i$2 < l$2; i$2 ++ ) {
+
+					var vertex = shapeVertices[ i$2 ];
+
+					vertices.push( vertex.x, vertex.y, 0 );
+					normals.push( 0, 0, 1 );
+					uvs.push( vertex.x, vertex.y ); // world uvs
+
+				}
+
+				// incides
+
+				for ( var i$3 = 0, l$3 = faces.length; i$3 < l$3; i$3 ++ ) {
+
+					var face = faces[ i$3 ];
+
+					var a = face[ 0 ] + indexOffset;
+					var b = face[ 1 ] + indexOffset;
+					var c = face[ 2 ] + indexOffset;
+
+					indices.push( a, b, c );
+					groupCount += 3;
+
+				}
+
+			}
+
+		}
+
+		if ( BufferGeometry ) ShapeGeometry.__proto__ = BufferGeometry;
+		ShapeGeometry.prototype = Object.create( BufferGeometry && BufferGeometry.prototype );
+		ShapeGeometry.prototype.constructor = ShapeGeometry;
+
+		ShapeGeometry.prototype.toJSON = function toJSON$2 () {
+
+			var data = BufferGeometry.prototype.toJSON.call( this );
+
+			var shapes = this.parameters.shapes;
+
+			return toJSON( shapes, data );
+
+		};
+
+		return ShapeGeometry;
+	}(BufferGeometry));
+
+	function toJSON( shapes, data ) {
+
+		data.shapes = [];
+
+		if ( Array.isArray( shapes ) ) {
+
+			for ( var i = 0, l = shapes.length; i < l; i ++ ) {
+
+				var shape = shapes[ i ];
+
+				data.shapes.push( shape.uuid );
+
+			}
+
+		} else {
+
+			data.shapes.push( shapes.uuid );
+
+		}
+
+		return data;
+
+	}
 
 	var SphereGeometry = /*@__PURE__*/(function (BufferGeometry) {
 		function SphereGeometry( radius, widthSegments, heightSegments, phiStart, phiLength, thetaStart, thetaLength ) {
@@ -39461,6 +39751,107 @@
 		return Path;
 	}(CurvePath));
 
+	var Shape = /*@__PURE__*/(function (Path) {
+		function Shape( points ) {
+
+			Path.call( this, points );
+
+			this.uuid = MathUtils.generateUUID();
+
+			this.type = 'Shape';
+
+			this.holes = [];
+
+		}
+
+		if ( Path ) Shape.__proto__ = Path;
+		Shape.prototype = Object.create( Path && Path.prototype );
+		Shape.prototype.constructor = Shape;
+
+		Shape.prototype.getPointsHoles = function getPointsHoles ( divisions ) {
+
+			var holesPts = [];
+
+			for ( var i = 0, l = this.holes.length; i < l; i ++ ) {
+
+				holesPts[ i ] = this.holes[ i ].getPoints( divisions );
+
+			}
+
+			return holesPts;
+
+		};
+
+		// get points of shape and holes (keypoints based on segments parameter)
+
+		Shape.prototype.extractPoints = function extractPoints ( divisions ) {
+
+			return {
+
+				shape: this.getPoints( divisions ),
+				holes: this.getPointsHoles( divisions )
+
+			};
+
+		};
+
+		Shape.prototype.copy = function copy ( source ) {
+
+			Path.prototype.copy.call( this, source );
+
+			this.holes = [];
+
+			for ( var i = 0, l = source.holes.length; i < l; i ++ ) {
+
+				var hole = source.holes[ i ];
+
+				this.holes.push( hole.clone() );
+
+			}
+
+			return this;
+
+		};
+
+		Shape.prototype.toJSON = function toJSON () {
+
+			var data = Path.prototype.toJSON.call(this);
+
+			data.uuid = this.uuid;
+			data.holes = [];
+
+			for ( var i = 0, l = this.holes.length; i < l; i ++ ) {
+
+				var hole = this.holes[ i ];
+				data.holes.push( hole.toJSON() );
+
+			}
+
+			return data;
+
+		};
+
+		Shape.prototype.fromJSON = function fromJSON ( json ) {
+
+			Path.prototype.fromJSON.call( this, json );
+
+			this.uuid = json.uuid;
+			this.holes = [];
+
+			for ( var i = 0, l = json.holes.length; i < l; i ++ ) {
+
+				var hole = json.holes[ i ];
+				this.holes.push( new Path().fromJSON( hole ) );
+
+			}
+
+			return this;
+
+		};
+
+		return Shape;
+	}(Path));
+
 	var Light = /*@__PURE__*/(function (Object3D) {
 		function Light( color, intensity ) {
 			if ( intensity === void 0 ) intensity = 1;
@@ -42887,6 +43278,29 @@
 
 		console.warn( 'THREE.Triangle: .normal() has been renamed to .getNormal().' );
 		return Triangle.getNormal( a, b, c, target );
+
+	};
+
+	//
+
+	Shape.prototype.extractAllPoints = function ( divisions ) {
+
+		console.warn( 'THREE.Shape: .extractAllPoints() has been removed. Use .extractPoints() instead.' );
+		return this.extractPoints( divisions );
+
+	};
+
+	Shape.prototype.extrude = function ( options ) {
+
+		console.warn( 'THREE.Shape: .extrude() has been removed. Use ExtrudeGeometry() instead.' );
+		return new ExtrudeGeometry( this, options );
+
+	};
+
+	Shape.prototype.makeGeometry = function ( options ) {
+
+		console.warn( 'THREE.Shape: .makeGeometry() has been removed. Use ShapeGeometry() instead.' );
+		return new ShapeGeometry( this, options );
 
 	};
 
@@ -47340,6 +47754,199 @@
 	  _lastInstancedMatrixVersion: -1,
 	  _instancedThreeObject: null
 	});
+
+	var dummyGeometry = new BufferGeometry();
+	var dummyMaterial = new MeshBasicMaterial();
+
+	var MESH_MATERIALS = {
+	  'basic': MeshBasicMaterial,
+	  'depth': MeshDepthMaterial,
+	  'distance': MeshDistanceMaterial,
+	  'lambert': MeshLambertMaterial,
+	  'matcap': MeshMatcapMaterial,
+	  'normal': MeshNormalMaterial,
+	  'phong': MeshPhongMaterial,
+	  'physical': MeshPhysicalMaterial,
+	  'standard': MeshStandardMaterial,
+	  'toon': MeshToonMaterial,
+	};
+
+
+
+	/**
+	 * A facade for rendering a Mesh. The following properties are supported:
+	 *
+	 * @member {Geometry|BufferGeometry} geometry - The geometry instance to be used for this
+	 *         mesh. It's recommended to use a shared geometry instance between meshes when possible.
+	 * @member {string|class|Material} material - The type of the material to be used for this mesh. Can either
+	 *         be a reference to a Material class, a Material instance, or one of the strings in the `MESH_MATERIALS`
+	 *         enum. Defaults to 'standard'.
+	 * @member {boolean} autoDisposeGeometry - Whether the geometry should be automatically disposed when this
+	 *         mesh is removed from the scene. Defaults to `false`. You can set it to `true` as a memory optimization
+	 *         if the geometry is not expected to return to the scene later, but this is not generally needed.
+	 * @member {boolean} autoDisposeMaterial - Whether the material's shader program should be automatically disposed
+	 *         when this mesh is removed from the scene. Defaults to `false`. You can set it to `true` as a memory
+	 *         optimization if the material uses a custom shader that is not expected to be used again, but this is
+	 *         not generally needed. Note that this will _not_ dispose any textures assigned to the material.
+	 *
+	 * Also, for convenience, properties of the material can be set via `material.*` shortcut properties. For example,
+	 * passing `{"material.transparent": true, "material.opacity": 0.5}` will set the material to half-opaque
+	 * transparency. Colors will call `set` on the Color object for that material property.
+	 */
+	var MeshFacade = /*@__PURE__*/(function (Object3DFacade) {
+	  function MeshFacade (parent) {
+	    Object3DFacade.call(this, parent);
+	    this.material = 'standard';
+	    this.autoDisposeGeometry = false;
+	    this.autoDisposeMaterial = false;
+	    this._dirtyMtlProps = null;
+	  }
+
+	  if ( Object3DFacade ) MeshFacade.__proto__ = Object3DFacade;
+	  MeshFacade.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  MeshFacade.prototype.constructor = MeshFacade;
+
+	  MeshFacade.prototype.initThreeObject = function initThreeObject () {
+	    return new Mesh(dummyGeometry, dummyMaterial)
+	  };
+
+	  MeshFacade.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var geometry = ref.geometry;
+	    var material = ref.material;
+	    var threeObject = ref.threeObject;
+
+	    if ((geometry || dummyGeometry) !== threeObject.geometry) {
+	      if (this.autoDisposeGeometry) {
+	        threeObject.geometry.dispose();
+	      }
+	      threeObject.geometry = geometry || dummyGeometry;
+	    }
+
+	    // Resolve `material` prop to a Material instance
+	    if (material !== this._lastMtl) {
+	      this._lastMtl = material;
+	      if (typeof material === 'string') {
+	        material = new (MESH_MATERIALS[material] || MeshStandardMaterial)();
+	      }
+	      else if (material && material.isMaterial) ;
+	      else if (typeof material === 'function') {
+	        material = new material();
+	      }
+	      else {
+	        material = new MeshStandardMaterial();
+	      }
+	      if (threeObject.material !== material) {
+	        if (this.autoDisposeMaterial) {
+	          threeObject.material.dispose();
+	        }
+	        threeObject.material = material;
+	      }
+	    }
+
+	    // If any of the material setters were called, sync the dirty values to the material
+	    var dirties = this._dirtyMtlProps;
+	    if (dirties) {
+	      threeObject.material.setValues(dirties);
+	      this._dirtyMtlProps = null;
+	    }
+
+	    Object3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  MeshFacade.prototype.destructor = function destructor () {
+	    if (this.autoDisposeGeometry) {
+	      this.threeObject.geometry.dispose();
+	    }
+	    if (this.autoDisposeMaterial) {
+	      this.threeObject.material.dispose();
+	    }
+	    Object3DFacade.prototype.destructor.call(this);
+	  };
+
+	  return MeshFacade;
+	}(Object3DFacade));
+
+	// For all of the known mesh materials, add `material.*` setters for all of their
+	// supported properties. The setters will update a "dirty" object which will then be
+	// applied to the material during afterUpdate; this lets us only deal with the specific
+	// material props that have been set rather than having to iterate over all props.
+	var ignoreMaterialProps = {type:1, id:1, uuid:1, version:1};
+	Object.keys(MESH_MATERIALS).forEach(function (key) {
+	  var material = new MESH_MATERIALS[key]();
+	  var loop = function ( mtlProp ) {
+	    if (material.hasOwnProperty(mtlProp) && !ignoreMaterialProps.hasOwnProperty(mtlProp)) {
+	      Object.defineProperty(MeshFacade.prototype, ("material." + mtlProp), {
+	        enumerable: true,
+	        configurable: true,
+	        get: function get() {
+	          var dirties = this._dirtyMtlProps;
+	          return (dirties && mtlProp in dirties) ? dirties[mtlProp] : this.threeObject.material[mtlProp]
+	        },
+	        set: function set(value) {
+	          var dirties = this._dirtyMtlProps || (this._dirtyMtlProps = Object.create(null));
+	          dirties[mtlProp] = value;
+	        }
+	      });
+	    }
+	  };
+
+	  for (var mtlProp in material) loop( mtlProp );
+	});
+
+	var geometries = Object.create(null, [
+	  ['low', 32],
+	  ['medium', 64],
+	  ['high', 128]
+	].reduce(function (descr, ref) {
+	  var name = ref[0];
+	  var segments = ref[1];
+
+	  descr[name] = {
+	    get: memoize(function () { return new CircleGeometry(1, segments).rotateX(-Math.PI / 2); }
+	    )
+	  };
+	  return descr
+	}, {}));
+
+	function getCircleGeometry(detail) {
+	  return geometries[detail] || geometries.medium
+	}
+
+	/**
+	 * A simple planar circle, laying along the x-z plane, facing the positive y axis, centered on the origin.
+	 * The `radius` property is an alias to uniform `scaleX` and `scaleZ`. Set `scaleX/Y/Z` individually if
+	 * you need non-uniform scaling.
+	 * The `detail` property allows selecting a LOD; its values can be 'low', 'medium', or 'high'.
+	 * To control the material, see {@link MeshFacade}.
+	 */
+	var CircleFacade = /*@__PURE__*/(function (MeshFacade) {
+	  function CircleFacade (parent) {
+	    MeshFacade.call(this, parent);
+	    this['material.side'] = this['material.shadowSide'] = DoubleSide;
+	  }
+
+	  if ( MeshFacade ) CircleFacade.__proto__ = MeshFacade;
+	  CircleFacade.prototype = Object.create( MeshFacade && MeshFacade.prototype );
+	  CircleFacade.prototype.constructor = CircleFacade;
+
+	  var prototypeAccessors = { geometry: { configurable: true },radius: { configurable: true } };
+
+	  prototypeAccessors.geometry.get = function () {
+	    return getCircleGeometry(this.detail)
+	  };
+
+	  prototypeAccessors.radius.set = function (r) {
+	    this.scaleX = this.scaleZ = r;
+	  };
+	  prototypeAccessors.radius.get = function () {
+	    return this.scaleX
+	  };
+
+	  Object.defineProperties( CircleFacade.prototype, prototypeAccessors );
+
+	  return CircleFacade;
+	}(MeshFacade));
 
 	var Canvas3D = /*@__PURE__*/(function (ReactCanvasBase) {
 	  function Canvas3D(props) {
@@ -52971,6 +53578,597 @@
 	  return XRAware
 	}
 
+	var getStrapGeometry = memoize(function () {
+	  return new CylinderGeometry(
+	    1,
+	    1,
+	    1,
+	    64,
+	    1,
+	    true
+	    // Math.PI / 4 * 3,
+	    // Math.PI / 4 * 6
+	  )
+	    .rotateX(Math.PI / 2)
+	});
+
+	var getStrapMaterial = memoize(function () {
+	  return new MeshStandardMaterial({
+	    color: 0x333333,
+	    side: DoubleSide
+	  })
+	});
+
+	var Strap = /*@__PURE__*/(function (Object3DFacade) {
+	  function Strap (parent) {
+	    Object3DFacade.call(this, parent, new Mesh(getStrapGeometry(), getStrapMaterial()));
+	  }
+
+	  if ( Object3DFacade ) Strap.__proto__ = Object3DFacade;
+	  Strap.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  Strap.prototype.constructor = Strap;
+
+	  var prototypeAccessors = { smallRadius: { configurable: true },largeRadius: { configurable: true },width: { configurable: true } };
+	  prototypeAccessors.smallRadius.set = function (val) {
+	    this.scaleX = val;
+	  };
+	  prototypeAccessors.largeRadius.set = function (val) {
+	    this.scaleY = val;
+	  };
+	  prototypeAccessors.width.set = function (val) {
+	    this.scaleZ = val;
+	  };
+
+	  Object.defineProperties( Strap.prototype, prototypeAccessors );
+
+	  return Strap;
+	}(Object3DFacade));
+
+	var getCogGeometry = memoize(function () {
+	  var outerRadius = 0.01;
+	  var innerRadius = 0.006;
+	  var midRadius = (innerRadius + outerRadius) * .75;
+	  var teeth = 8;
+	  var twoPi = Math.PI * 2;
+	  var shape = new Shape().moveTo(midRadius, 0);
+	  for (var i = 0; i < teeth; i++) {
+	    var angle = i / teeth * twoPi;
+	    shape.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+	    angle = (i + 0.5) / teeth * twoPi;
+	    shape.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+	    shape.lineTo(Math.cos(angle) * midRadius, Math.sin(angle) * midRadius);
+	    if (i === teeth - 1) {
+	      shape.lineTo(midRadius, 0); //close shape exactly
+	    } else {
+	      angle = (i + 1) / teeth * twoPi;
+	      shape.lineTo(Math.cos(angle) * midRadius, Math.sin(angle) * midRadius);
+	    }
+	  }
+	  shape.holes.push(
+	    new Path().absellipse(0, 0, innerRadius, innerRadius, 0, twoPi, false)
+	  );
+	  return new ExtrudeGeometry(shape, {
+	    curveSegments: teeth * 2,
+	    depth: 0.005,
+	    bevelEnabled: false
+	  })
+	});
+
+	var Cog = /*@__PURE__*/(function (MeshFacade) {
+	  function Cog () {
+	    MeshFacade.apply(this, arguments);
+	  }
+
+	  if ( MeshFacade ) Cog.__proto__ = MeshFacade;
+	  Cog.prototype = Object.create( MeshFacade && MeshFacade.prototype );
+	  Cog.prototype.constructor = Cog;
+
+	  var prototypeAccessors = { geometry: { configurable: true } };
+
+	  prototypeAccessors.geometry.get = function () {
+	    return getCogGeometry()
+	  };
+
+	  Object.defineProperties( Cog.prototype, prototypeAccessors );
+
+	  return Cog;
+	}(MeshFacade));
+
+	var tempVec3$3 = new Vector3();
+
+	var cogActiveAnim = {
+	  from: {rotateX: 0},
+	  to: {rotateX: Math.PI * 2},
+	  duration: 5000,
+	  iterations: Infinity
+	};
+
+
+	var gripOffsetDist = 0.08;
+	var gripOffsetAngle = Math.PI / 4;
+	var largeRadius = 0.035;
+	var smallRadius = largeRadius * 0.75;
+	var strapWidth = 0.025;
+
+
+	var Wristband = /*@__PURE__*/(function (Group3DFacade) {
+	  function Wristband () {
+	    Group3DFacade.apply(this, arguments);
+	  }
+
+	  if ( Group3DFacade ) Wristband.__proto__ = Group3DFacade;
+	  Wristband.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
+	  Wristband.prototype.constructor = Wristband;
+
+	  Wristband.prototype.syncPose = function syncPose (gripPose) {
+	    if (gripPose) {
+	      this.visible = true;
+	      copyXRPoseToFacadeProps(gripPose, this);
+	      this.traverse(updateMatrices);
+	      if (this.onCogMove && this._cogFacade) {
+	        this.onCogMove(this._cogFacade.getWorldPosition(tempVec3$3));
+	      }
+	    } else {
+	      this.visible = false;
+	    }
+	  };
+
+	  Wristband.prototype.describeChildren = function describeChildren () {
+	    var this$1 = this;
+
+	    var ref = this;
+	    var active = ref.active;
+
+	    var groupDef = this._childTpl || (this._childTpl = {
+	      key: 'g',
+	      facade: Group3DFacade,
+	      rotateX: -gripOffsetAngle,
+	      y: gripOffsetDist * Math.cos(gripOffsetAngle),
+	      z: gripOffsetDist * Math.sin(gripOffsetAngle),
+	      children: [
+	        {
+	          key: 'strap',
+	          facade: Strap,
+	          smallRadius: smallRadius,
+	          largeRadius: largeRadius,
+	          width: strapWidth
+	        },
+	        {
+	          key: 'cog',
+	          facade: Cog,
+	          ref: function (f) {
+	            this$1._cogFacade = f;
+	          },
+	          rotateY: Math.PI / 2,
+	          x: smallRadius,
+	          animation: null,
+	          transition: {
+	            scale: {
+	              duration: 500,
+	              easing: 'easeOutBack'
+	            },
+	            'material.color': {
+	              interpolate: 'color'
+	            }
+	          }
+	        }
+	      ]
+	    });
+
+	    var ref$1 = groupDef.children;
+	    var cogDef = ref$1[1];
+	    cogDef.scale = active ? 1.75 : 1;
+	    cogDef['material.color'] = active ? 0x3399ff : 0x999999;
+	    cogDef.animation = active ? cogActiveAnim : null;
+
+	    return groupDef
+	  };
+
+	  return Wristband;
+	}(Group3DFacade));
+
+
+	function updateMatrices(obj) {
+	  if (obj.updateMatrices) {
+	    obj.updateMatrices();
+	  }
+	}
+
+	var vertexShader = "\nvarying vec2 vUV;\nvoid main() {\n  vUV = uv;\n  if (uv.y == 0.0) { //src pos is worldspace\n    gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);\n  } else {\n    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n  }\n}\n";
+
+	var baseAlpha = 0.2;
+	var scanlines = [
+	  // sep = separation between lines
+	  // vel = movement speed, in scans per second
+	  // size = width of line's gradient
+	  // alpha = alpha to add at line's center
+	  {sep: 0.4, vel: 0.15, size: 0.1, alpha: 0.1},
+	  {sep: 0.7, vel: 0.2, size: 0.15, alpha: 0.1},
+	  {sep: 0.3, vel: 0.3, size: 0.1, alpha: 0.1},
+	  {sep: 0.2, vel: 0.6, size: 0.1, alpha: 0.04},
+	  {sep: 0.1, vel: 0.4, size: 0.02, alpha: 0.04} ];
+
+	var fragmentShader = "\nuniform float time;\nuniform vec4 fade;\nuniform vec3 color;\nvarying vec2 vUV;\n\nfloat distToScanline(float x, float separation, float velocity) {\n  x += time / 1000.0 * velocity;\n  float dist = abs(x - round(x / separation) * separation);\n  return dist;\n}\n\nvoid main() {\n  float alpha = " + baseAlpha + ";\n  " + (scanlines.map(function (ref) {
+	      var sep = ref.sep;
+	      var vel = ref.vel;
+	      var size = ref.size;
+	      var alpha = ref.alpha;
+
+	      return ("alpha += " + alpha + " * smoothstep(" + (size / 2) + ", 0.0, distToScanline(vUV.y, " + sep + ", " + vel + "));");
+	}
+	  ).join('\n')) + "\n  alpha *= min(smoothstep(fade.x, fade.y, vUV.y), smoothstep(fade.w, fade.z, vUV.y));\n  gl_FragColor = vec4(color, alpha);\n}\n";
+
+	var epoch$1 = Date.now();
+
+	var defaultColor = 0x3399ff;
+
+	var createMaterial = function() {
+	  return new ShaderMaterial({
+	    uniforms: {
+	      time: {get value() {return epoch$1 - Date.now()}},
+	      color: {value: new Color()},
+	      fade: {value: new Vector4(0, 0.4, 0.7, 1)} //fade in+out gradient stops
+	    },
+	    vertexShader: vertexShader,
+	    fragmentShader: fragmentShader,
+	    transparent: true,
+	    // side: DoubleSide
+	  })
+	};
+
+	/**
+	 * A holographic projection cone effect. Creates a translucent mesh in a cone shape from
+	 * a single world-space source vertex to an arbitrary target shape, with animated lines
+	 * traveling from source to target.
+	 *
+	 * @member {Vector3} sourceWorldPosition - The world-space position of the cone's source
+	 * @member {number[]} targetVertices - The local-space vertices describing the target shape,
+	 *         e.g. a rectangle or circle. This array is treated as immutable, so if you need to
+	 *         update the vertices then pass a new array instance.
+	 * @member {Color|number|string} color - The color of the
+	 */
+	var Projection = /*@__PURE__*/(function (MeshFacade) {
+	  function Projection (parent) {
+	    MeshFacade.call(this, parent);
+	    this.threeObject.frustumCulled = false;
+	    this.renderOrder = 99999;
+
+	    this.geometry = new BufferGeometry();
+	    this.autoDisposeGeometry = true;
+	    this.color = defaultColor;
+
+	    this.material = createMaterial();
+	  }
+
+	  if ( MeshFacade ) Projection.__proto__ = MeshFacade;
+	  Projection.prototype = Object.create( MeshFacade && MeshFacade.prototype );
+	  Projection.prototype.constructor = Projection;
+
+	  Projection.prototype.syncSourcePosition = function syncSourcePosition () {
+	    // Sync the geometry from the current sourceWorldPosition value
+	    var ref = this;
+	    var srcPos = ref.sourceWorldPosition;
+	    var posAttr = this.threeObject.geometry.getAttribute('position');
+	    if (srcPos && posAttr && (
+	      srcPos.x !== posAttr.getX(0) || srcPos.y !== posAttr.getY(0) || srcPos.z !== posAttr.getZ(0)
+	    )) {
+	      posAttr.setXYZ(0, srcPos.x, srcPos.y, srcPos.z);
+	      posAttr.needsUpdate = true;
+	    }
+	  };
+
+	  Projection.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var targetVertices = ref.targetVertices;
+	    var geometry = ref.geometry;
+	    var color = ref.color;
+
+	    // Update geometry vertices
+	    var posAttr = this.geometry.getAttribute('position');
+	    if (!posAttr || posAttr._data !== targetVertices) { //Note: targetVertices treated as immutable
+	      // position attribute: [...source_vertices, ...targetVertices]
+	      var posArr = new Float32Array(targetVertices.length + 3);
+	      posArr.set(targetVertices, 3); //first pos reserved for source vertex
+	      posAttr = new BufferAttribute(posArr, 3);
+	      posAttr.usage = DynamicDrawUsage;
+	      geometry.setAttribute('position', posAttr);
+
+	      // uv attribute: [0, 0, 0, 1, 0, 1, 0, 1, etc.]
+	      var uvAttr = new BufferAttribute(new Float32Array(posAttr.count * 2), 2);
+	      for (var i = 1; i < uvAttr.count; i++) {
+	        uvAttr.setY(i, 1);
+	      }
+	      geometry.setAttribute('uv', uvAttr);
+
+	      // index: triangles from the source vertex to each consecutive pair of target vertices
+	      var indexArr = [];
+	      for (var i$1 = 1, len = targetVertices.length / 3; i$1 <= len; i$1++) {
+	        indexArr.push(0, i$1 === 1 ? len : i$1 - 1, i$1);
+	      }
+	      geometry.setIndex(indexArr);
+	    }
+
+	    // Handle changing sourceWorldPosition
+	    this.syncSourcePosition();
+
+	    // Material
+	    if (color == null) {
+	      color = defaultColor;
+	    }
+	    if (color !== this._color) {
+	      this.material.uniforms.color.value.set(this._color = color);
+	    }
+
+	    MeshFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return Projection;
+	}(MeshFacade));
+
+	var tempMat4$2 = new Matrix4();
+	var targetPos = new Vector3();
+	var camPos = new Vector3();
+
+	var ContentContainer = /*@__PURE__*/(function (Object3DFacade) {
+	  function ContentContainer (parent) {
+	    Object3DFacade.call(this, parent, new Group());
+	    this.distancePastGrip = 0.25; //distance past grip in camera-to-grip direction
+	    this.minDistanceFromCamera = 0.5;
+	    this.heightAboveGrip = 0.15;
+	    this.platformRadius = 0.25;
+	    this.projectionColor = null;
+	    this.projectionSourcePosition = null; //worldspace vec3
+	    this.gripPose = null;
+	    this.active = false;
+	    this.keepContentAlive = false;
+	  }
+
+	  if ( Object3DFacade ) ContentContainer.__proto__ = Object3DFacade;
+	  ContentContainer.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  ContentContainer.prototype.constructor = ContentContainer;
+
+	  /**
+	   * Sync to the current XRFrame's gripPose - all matrix syncing is localized here
+	   * to avoid a full afterUpdate pass on every frame.
+	   */
+	  ContentContainer.prototype.syncPose = function syncPose (gripPose) {
+	    var visible = false;
+	    if (gripPose) {
+	      // Get current posed camera position, relative to the parent
+	      var cam = this.getCameraFacade().threeObject;
+	      camPos.setFromMatrixPosition(cam.matrixWorld)
+	        .applyMatrix4(invertMatrix4(this.threeObject.parent.matrixWorld, tempMat4$2));
+
+	      // Find target position
+	      var targetScale;
+	      if (this.active) {
+	        // Find direction vector and lengthen it to the target distance to find base position
+	        targetPos.copy(gripPose.transform.position);
+	        targetPos.y = camPos.y;
+	        targetPos.sub(camPos);
+	        targetPos.setLength(Math.max(this.minDistanceFromCamera, targetPos.length() + this.distancePastGrip));
+	        targetPos.add(camPos);
+	        targetPos.y = gripPose.transform.position.y + this.heightAboveGrip;
+	        targetScale = 1;
+	      } else {
+	        targetPos.copy(gripPose.transform.position);
+	        targetScale = 0.001;
+	      }
+
+	      // Pull partway toward target position and scale, like a spring
+	      var pos = this.threeObject.position;
+	      pos.lerp(targetPos, 0.05); //move by 5% of distance each frame)
+	      this.scale += (targetScale - this.scale) * 0.3;
+	      visible = this.scale > 0.01; //hide below a certain size
+
+	      if (visible) {
+	        // Rotate to face camera
+	        this.rotateY = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
+
+	        // Update projection cone's source position
+	        var proj = this.getChildByKey('$projection');
+	        if (proj) {
+	          proj.syncSourcePosition();
+	        }
+
+	        // Sync all matrices
+	        this.traverse(updateMatrices$1);
+	      }
+	    }
+	    if (visible !== this.visible) {
+	      this.update({visible: visible});
+	    }
+	  };
+
+	  ContentContainer.prototype.describeChildren = function describeChildren () {
+	    if (!this.visible && !this.keepContentAlive) {
+	      return null
+	    }
+
+	    var kids = this._kidsTpl || (this._kidsTpl = [
+	      {
+	        key: '$platform',
+	        facade: CircleFacade,
+	        radius: 1,
+	        material: 'lambert',
+	        castShadow: true,
+	        receiveShadow: true,
+	        'material.color': 0x333333
+	      },
+	      {
+	        key: '$projection',
+	        facade: Projection,
+	        sourceWorldPosition: new Vector3(),
+	        targetVertices: Object.freeze(function () {
+	          // trace circular path
+	          var verts = [];
+	          for (var i = 0; i < 32; i++) {
+	            var angle = Math.PI * 2 * (i / 32);
+	            verts.push(Math.cos(angle), 0, Math.sin(angle));
+	          }
+	          return verts
+	        }())
+	      }
+	    ]);
+
+	    // Update platform size
+	    kids[0].scale = kids[1].scale = this.platformRadius;
+
+	    // Update projection source
+	    kids[1].sourceWorldPosition = this.projectionSourcePosition;
+
+	    // Colors
+	    kids[0]['material.color'] = this.platformColor;
+	    kids[1].color = this.projectionColor;
+
+	    return kids.concat(this.children)
+	  };
+
+	  return ContentContainer;
+	}(Object3DFacade));
+
+	function updateMatrices$1(obj) {
+	  if (obj.updateMatrices) {
+	    obj.updateMatrices();
+	    obj._checkBoundsChange(); //TODO ugh shouldn't have to call private method
+	  }
+	}
+
+	var tempMat4$3 = new Matrix4();
+	var tempQuat$3 = new Quaternion();
+	var tempVec3$4 = new Vector3();
+	var upVec3 = new Vector3(0, 1, 0);
+
+
+	/**
+	 * This facade provides a container for arbitrary global UI, which is hidden by default
+	 * but is easily brought up by a simple gesture. A wristband is added to one of the hand
+	 * controllers, with an icon affordance on the inner wrist. When that icon is turned
+	 * upwards, the UI is projected from it.
+	 *
+	 * @property {('left'|'right')} preferredHand - which hand the wristband should appear on.
+	 */
+	var WristMountedUI = /*@__PURE__*/(function (Group3DFacade) {
+	  function WristMountedUI (parent) {
+	    Group3DFacade.call(this, parent);
+	    // Config:
+	    this.activeUpAngle = Math.PI / 7;
+	    this.preferredHand = 'left';
+	    this.platformRadius = 0.25;
+	    this.platformColor = 0x333333;
+	    this.projectionColor = 0x3399ff;
+	    this.keepContentAlive = false;
+	    this.onActiveChange = null;
+
+	    // Internal state:
+	    this.gripPose = null;
+	    this.active = false;
+
+	    this._cogPos = new Vector3();
+	    this.addEventListener('xrframe', this.onXRFrame.bind(this));
+	  }
+
+	  if ( Group3DFacade ) WristMountedUI.__proto__ = Group3DFacade;
+	  WristMountedUI.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
+	  WristMountedUI.prototype.constructor = WristMountedUI;
+
+	  WristMountedUI.prototype.describeChildren = function describeChildren () {
+	    var this$1 = this;
+
+	    // Only render children if we have a valid gripPose
+	    if (!this.gripPose) {
+	      return null
+	    }
+
+	    var children = this._childTpl || (this._childTpl = [
+	      {
+	        key: 'wristband',
+	        facade: Wristband,
+	        active: false,
+	        gripPose: null,
+	        onCogMove: function (worldPos) {
+	          this$1._cogPos.copy(worldPos);
+	        }
+	      },
+	      {
+	        key: 'content',
+	        facade: ContentContainer,
+	        active: false,
+	        gripPose: null,
+	        children: null
+	      }
+	    ]);
+
+	    var wristbandDef = children[0];
+	    var contentDef = children[1];
+	    wristbandDef.active = contentDef.active = this.active;
+	    //wristbandDef.gripPose = contentDef.gripPose = this.gripPose
+	    contentDef.platformRadius = this.platformRadius;
+	    contentDef.platformColor = this.platformColor;
+	    contentDef.projectionColor = this.projectionColor;
+	    contentDef.projectionSourcePosition = this._cogPos;
+	    contentDef.keepContentAlive = this.keepContentAlive;
+	    contentDef.children = this.children;
+
+	    return children
+	  };
+
+	  WristMountedUI.prototype.updateMatrices = function updateMatrices () {
+	    // Force matrix to match that of the camera's pre-pose transform
+	    this.threeObject.matrixWorld.copy(this.getCameraFacade().threeObject.matrix);
+	    this.markWorldMatrixDirty();
+	  };
+
+	  WristMountedUI.prototype.onXRFrame = function onXRFrame (time, xrFrame) {
+	    var gripPose = null;
+	    var active = false;
+	    var inputSources = xrFrame.session.inputSources;
+	    if (inputSources) {
+	      var gripSpace = null;
+	      for (var i = 0, len = inputSources.length; i < len; i++) {
+	        if (inputSources[i].handedness === this.preferredHand) {
+	          gripSpace = inputSources[i].gripSpace;
+	          break
+	        }
+	      }
+	      if (gripSpace) {
+	        // Calculate grip pose so we can pass it down to the Wristband
+	        // Note: the gripPose will be relative to this object's matrix, which is synced to the
+	        // camera's base position. This simplifies child transform calculations because you can
+	        // treat them always as relative to default position/orientation.
+	        var cam = this.getCameraFacade();
+	        gripPose = xrFrame.getPose(gripSpace, cam.xrReferenceSpace);
+	        if (gripPose) {
+	          // If turned to upward angle, set to active
+	          // TODO: needs debouncing!
+	          tempVec3$4.set(1, 0, 0).applyQuaternion(
+	            tempQuat$3.setFromRotationMatrix(tempMat4$3.fromArray(gripPose.transform.matrix))
+	          );
+	          active = tempVec3$4.angleTo(upVec3) < this.activeUpAngle;
+	        }
+	      }
+	    }
+
+	    if (active !== this.active) {
+	      if (this.onActiveChange) {
+	        this.onActiveChange(active);
+	      }
+	      this.update({active: active});
+	    }
+
+	    if (!!gripPose !== !!this.gripPose) {
+	      this.update({gripPose: gripPose});
+	    }
+	    else if (gripPose) {
+	      // Skip full afterUpdate pass, just give the gripPose to children - they both have
+	      // a syncPose method to handle syncing matrices without a full afterUpdate.
+	      this.forEachChild(function (child) { return child.syncPose(gripPose); });
+	    }
+	  };
+
+	  return WristMountedUI;
+	}(Group3DFacade));
+
 	var BOX_SIZE = 40;
 
 	var geometry = new BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
@@ -53197,6 +54395,780 @@
 	  width: propTypes.number,
 	  height: propTypes.number
 	};
+
+	function count(node) {
+	  var sum = 0,
+	      children = node.children,
+	      i = children && children.length;
+	  if (!i) { sum = 1; }
+	  else { while (--i >= 0) { sum += children[i].value; } }
+	  node.value = sum;
+	}
+
+	function node_count() {
+	  return this.eachAfter(count);
+	}
+
+	function node_each(callback) {
+	  var node = this, current, next = [node], children, i, n;
+	  do {
+	    current = next.reverse(), next = [];
+	    while (node = current.pop()) {
+	      callback(node), children = node.children;
+	      if (children) { for (i = 0, n = children.length; i < n; ++i) {
+	        next.push(children[i]);
+	      } }
+	    }
+	  } while (next.length);
+	  return this;
+	}
+
+	function node_eachBefore(callback) {
+	  var node = this, nodes = [node], children, i;
+	  while (node = nodes.pop()) {
+	    callback(node), children = node.children;
+	    if (children) { for (i = children.length - 1; i >= 0; --i) {
+	      nodes.push(children[i]);
+	    } }
+	  }
+	  return this;
+	}
+
+	function node_eachAfter(callback) {
+	  var node = this, nodes = [node], next = [], children, i, n;
+	  while (node = nodes.pop()) {
+	    next.push(node), children = node.children;
+	    if (children) { for (i = 0, n = children.length; i < n; ++i) {
+	      nodes.push(children[i]);
+	    } }
+	  }
+	  while (node = next.pop()) {
+	    callback(node);
+	  }
+	  return this;
+	}
+
+	function node_sum(value) {
+	  return this.eachAfter(function(node) {
+	    var sum = +value(node.data) || 0,
+	        children = node.children,
+	        i = children && children.length;
+	    while (--i >= 0) { sum += children[i].value; }
+	    node.value = sum;
+	  });
+	}
+
+	function node_sort(compare) {
+	  return this.eachBefore(function(node) {
+	    if (node.children) {
+	      node.children.sort(compare);
+	    }
+	  });
+	}
+
+	function node_path(end) {
+	  var start = this,
+	      ancestor = leastCommonAncestor(start, end),
+	      nodes = [start];
+	  while (start !== ancestor) {
+	    start = start.parent;
+	    nodes.push(start);
+	  }
+	  var k = nodes.length;
+	  while (end !== ancestor) {
+	    nodes.splice(k, 0, end);
+	    end = end.parent;
+	  }
+	  return nodes;
+	}
+
+	function leastCommonAncestor(a, b) {
+	  if (a === b) { return a; }
+	  var aNodes = a.ancestors(),
+	      bNodes = b.ancestors(),
+	      c = null;
+	  a = aNodes.pop();
+	  b = bNodes.pop();
+	  while (a === b) {
+	    c = a;
+	    a = aNodes.pop();
+	    b = bNodes.pop();
+	  }
+	  return c;
+	}
+
+	function node_ancestors() {
+	  var node = this, nodes = [node];
+	  while (node = node.parent) {
+	    nodes.push(node);
+	  }
+	  return nodes;
+	}
+
+	function node_descendants() {
+	  var nodes = [];
+	  this.each(function(node) {
+	    nodes.push(node);
+	  });
+	  return nodes;
+	}
+
+	function node_leaves() {
+	  var leaves = [];
+	  this.eachBefore(function(node) {
+	    if (!node.children) {
+	      leaves.push(node);
+	    }
+	  });
+	  return leaves;
+	}
+
+	function node_links() {
+	  var root = this, links = [];
+	  root.each(function(node) {
+	    if (node !== root) { // Don’t include the root’s parent, if any.
+	      links.push({source: node.parent, target: node});
+	    }
+	  });
+	  return links;
+	}
+
+	function hierarchy(data, children) {
+	  var root = new Node$1(data),
+	      valued = +data.value && (root.value = data.value),
+	      node,
+	      nodes = [root],
+	      child,
+	      childs,
+	      i,
+	      n;
+
+	  if (children == null) { children = defaultChildren; }
+
+	  while (node = nodes.pop()) {
+	    if (valued) { node.value = +node.data.value; }
+	    if ((childs = children(node.data)) && (n = childs.length)) {
+	      node.children = new Array(n);
+	      for (i = n - 1; i >= 0; --i) {
+	        nodes.push(child = node.children[i] = new Node$1(childs[i]));
+	        child.parent = node;
+	        child.depth = node.depth + 1;
+	      }
+	    }
+	  }
+
+	  return root.eachBefore(computeHeight);
+	}
+
+	function node_copy() {
+	  return hierarchy(this).eachBefore(copyData);
+	}
+
+	function defaultChildren(d) {
+	  return d.children;
+	}
+
+	function copyData(node) {
+	  node.data = node.data.data;
+	}
+
+	function computeHeight(node) {
+	  var height = 0;
+	  do { node.height = height; }
+	  while ((node = node.parent) && (node.height < ++height));
+	}
+
+	function Node$1(data) {
+	  this.data = data;
+	  this.depth =
+	  this.height = 0;
+	  this.parent = null;
+	}
+
+	Node$1.prototype = hierarchy.prototype = {
+	  constructor: Node$1,
+	  count: node_count,
+	  each: node_each,
+	  eachAfter: node_eachAfter,
+	  eachBefore: node_eachBefore,
+	  sum: node_sum,
+	  sort: node_sort,
+	  path: node_path,
+	  ancestors: node_ancestors,
+	  descendants: node_descendants,
+	  leaves: node_leaves,
+	  links: node_links,
+	  copy: node_copy
+	};
+
+	function required(f) {
+	  if (typeof f !== "function") { throw new Error; }
+	  return f;
+	}
+
+	function constantZero() {
+	  return 0;
+	}
+
+	function constant(x) {
+	  return function() {
+	    return x;
+	  };
+	}
+
+	function roundNode(node) {
+	  node.x0 = Math.round(node.x0);
+	  node.y0 = Math.round(node.y0);
+	  node.x1 = Math.round(node.x1);
+	  node.y1 = Math.round(node.y1);
+	}
+
+	function treemapDice(parent, x0, y0, x1, y1) {
+	  var nodes = parent.children,
+	      node,
+	      i = -1,
+	      n = nodes.length,
+	      k = parent.value && (x1 - x0) / parent.value;
+
+	  while (++i < n) {
+	    node = nodes[i], node.y0 = y0, node.y1 = y1;
+	    node.x0 = x0, node.x1 = x0 += node.value * k;
+	  }
+	}
+
+	function treemapSlice(parent, x0, y0, x1, y1) {
+	  var nodes = parent.children,
+	      node,
+	      i = -1,
+	      n = nodes.length,
+	      k = parent.value && (y1 - y0) / parent.value;
+
+	  while (++i < n) {
+	    node = nodes[i], node.x0 = x0, node.x1 = x1;
+	    node.y0 = y0, node.y1 = y0 += node.value * k;
+	  }
+	}
+
+	var phi = (1 + Math.sqrt(5)) / 2;
+
+	function squarifyRatio(ratio, parent, x0, y0, x1, y1) {
+	  var rows = [],
+	      nodes = parent.children,
+	      row,
+	      nodeValue,
+	      i0 = 0,
+	      i1 = 0,
+	      n = nodes.length,
+	      dx, dy,
+	      value = parent.value,
+	      sumValue,
+	      minValue,
+	      maxValue,
+	      newRatio,
+	      minRatio,
+	      alpha,
+	      beta;
+
+	  while (i0 < n) {
+	    dx = x1 - x0, dy = y1 - y0;
+
+	    // Find the next non-empty node.
+	    do { sumValue = nodes[i1++].value; } while (!sumValue && i1 < n);
+	    minValue = maxValue = sumValue;
+	    alpha = Math.max(dy / dx, dx / dy) / (value * ratio);
+	    beta = sumValue * sumValue * alpha;
+	    minRatio = Math.max(maxValue / beta, beta / minValue);
+
+	    // Keep adding nodes while the aspect ratio maintains or improves.
+	    for (; i1 < n; ++i1) {
+	      sumValue += nodeValue = nodes[i1].value;
+	      if (nodeValue < minValue) { minValue = nodeValue; }
+	      if (nodeValue > maxValue) { maxValue = nodeValue; }
+	      beta = sumValue * sumValue * alpha;
+	      newRatio = Math.max(maxValue / beta, beta / minValue);
+	      if (newRatio > minRatio) { sumValue -= nodeValue; break; }
+	      minRatio = newRatio;
+	    }
+
+	    // Position and record the row orientation.
+	    rows.push(row = {value: sumValue, dice: dx < dy, children: nodes.slice(i0, i1)});
+	    if (row.dice) { treemapDice(row, x0, y0, x1, value ? y0 += dy * sumValue / value : y1); }
+	    else { treemapSlice(row, x0, y0, value ? x0 += dx * sumValue / value : x1, y1); }
+	    value -= sumValue, i0 = i1;
+	  }
+
+	  return rows;
+	}
+
+	var squarify = (function custom(ratio) {
+
+	  function squarify(parent, x0, y0, x1, y1) {
+	    squarifyRatio(ratio, parent, x0, y0, x1, y1);
+	  }
+
+	  squarify.ratio = function(x) {
+	    return custom((x = +x) > 1 ? x : 1);
+	  };
+
+	  return squarify;
+	})(phi);
+
+	function treemap() {
+	  var tile = squarify,
+	      round = false,
+	      dx = 1,
+	      dy = 1,
+	      paddingStack = [0],
+	      paddingInner = constantZero,
+	      paddingTop = constantZero,
+	      paddingRight = constantZero,
+	      paddingBottom = constantZero,
+	      paddingLeft = constantZero;
+
+	  function treemap(root) {
+	    root.x0 =
+	    root.y0 = 0;
+	    root.x1 = dx;
+	    root.y1 = dy;
+	    root.eachBefore(positionNode);
+	    paddingStack = [0];
+	    if (round) { root.eachBefore(roundNode); }
+	    return root;
+	  }
+
+	  function positionNode(node) {
+	    var p = paddingStack[node.depth],
+	        x0 = node.x0 + p,
+	        y0 = node.y0 + p,
+	        x1 = node.x1 - p,
+	        y1 = node.y1 - p;
+	    if (x1 < x0) { x0 = x1 = (x0 + x1) / 2; }
+	    if (y1 < y0) { y0 = y1 = (y0 + y1) / 2; }
+	    node.x0 = x0;
+	    node.y0 = y0;
+	    node.x1 = x1;
+	    node.y1 = y1;
+	    if (node.children) {
+	      p = paddingStack[node.depth + 1] = paddingInner(node) / 2;
+	      x0 += paddingLeft(node) - p;
+	      y0 += paddingTop(node) - p;
+	      x1 -= paddingRight(node) - p;
+	      y1 -= paddingBottom(node) - p;
+	      if (x1 < x0) { x0 = x1 = (x0 + x1) / 2; }
+	      if (y1 < y0) { y0 = y1 = (y0 + y1) / 2; }
+	      tile(node, x0, y0, x1, y1);
+	    }
+	  }
+
+	  treemap.round = function(x) {
+	    return arguments.length ? (round = !!x, treemap) : round;
+	  };
+
+	  treemap.size = function(x) {
+	    return arguments.length ? (dx = +x[0], dy = +x[1], treemap) : [dx, dy];
+	  };
+
+	  treemap.tile = function(x) {
+	    return arguments.length ? (tile = required(x), treemap) : tile;
+	  };
+
+	  treemap.padding = function(x) {
+	    return arguments.length ? treemap.paddingInner(x).paddingOuter(x) : treemap.paddingInner();
+	  };
+
+	  treemap.paddingInner = function(x) {
+	    return arguments.length ? (paddingInner = typeof x === "function" ? x : constant(+x), treemap) : paddingInner;
+	  };
+
+	  treemap.paddingOuter = function(x) {
+	    return arguments.length ? treemap.paddingTop(x).paddingRight(x).paddingBottom(x).paddingLeft(x) : treemap.paddingTop();
+	  };
+
+	  treemap.paddingTop = function(x) {
+	    return arguments.length ? (paddingTop = typeof x === "function" ? x : constant(+x), treemap) : paddingTop;
+	  };
+
+	  treemap.paddingRight = function(x) {
+	    return arguments.length ? (paddingRight = typeof x === "function" ? x : constant(+x), treemap) : paddingRight;
+	  };
+
+	  treemap.paddingBottom = function(x) {
+	    return arguments.length ? (paddingBottom = typeof x === "function" ? x : constant(+x), treemap) : paddingBottom;
+	  };
+
+	  treemap.paddingLeft = function(x) {
+	    return arguments.length ? (paddingLeft = typeof x === "function" ? x : constant(+x), treemap) : paddingLeft;
+	  };
+
+	  return treemap;
+	}
+
+	var treemapResquarify = (function custom(ratio) {
+
+	  function resquarify(parent, x0, y0, x1, y1) {
+	    if ((rows = parent._squarify) && (rows.ratio === ratio)) {
+	      var rows,
+	          row,
+	          nodes,
+	          i,
+	          j = -1,
+	          n,
+	          m = rows.length,
+	          value = parent.value;
+
+	      while (++j < m) {
+	        row = rows[j], nodes = row.children;
+	        for (i = row.value = 0, n = nodes.length; i < n; ++i) { row.value += nodes[i].value; }
+	        if (row.dice) { treemapDice(row, x0, y0, x1, y0 += (y1 - y0) * row.value / value); }
+	        else { treemapSlice(row, x0, y0, x0 += (x1 - x0) * row.value / value, y1); }
+	        value -= row.value;
+	      }
+	    } else {
+	      parent._squarify = rows = squarifyRatio(ratio, parent, x0, y0, x1, y1);
+	      rows.ratio = ratio;
+	    }
+	  }
+
+	  resquarify.ratio = function(x) {
+	    return custom((x = +x) > 1 ? x : 1);
+	  };
+
+	  return resquarify;
+	})(phi);
+
+	var groundGeometry = new PlaneGeometry(1, 1);
+
+	var groundMaterial = new MeshPhongMaterial({
+	  color: 0x222222,
+	  side: DoubleSide
+	});
+
+	var Ground = /*@__PURE__*/(function (Object3DFacade) {
+	  function Ground () {
+	    Object3DFacade.apply(this, arguments);
+	  }
+
+	  if ( Object3DFacade ) Ground.__proto__ = Object3DFacade;
+	  Ground.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  Ground.prototype.constructor = Ground;
+
+	  var prototypeAccessors = { width: { configurable: true },height: { configurable: true } };
+
+	  Ground.prototype.initThreeObject = function initThreeObject () {
+	    return new Mesh(groundGeometry, groundMaterial)
+	  };
+
+	  prototypeAccessors.width.set = function (w) {
+	    this.x = w / 2;
+	    this.scaleX = w;
+	  };
+	  prototypeAccessors.width.get = function () {
+	    return this.scaleX
+	  };
+
+	  prototypeAccessors.height.set = function (h) {
+	    this.y = h / 2;
+	    this.scaleY = h;
+	  };
+	  prototypeAccessors.height.get = function () {
+	    return this.scaleY
+	  };
+
+	  Ground.prototype.destructor = function destructor () {
+	    Object3DFacade.prototype.destructor.call(this);
+	    // TODO dispose geometry/material?
+	  };
+
+	  Object.defineProperties( Ground.prototype, prototypeAccessors );
+
+	  return Ground;
+	}(Object3DFacade));
+
+	/*
+	const hostGeometry = new BufferGeometry()
+	hostGeometry.setAttribute('position', new BufferAttribute(new Float32Array([
+	  0,0,0, 1,0,0, 1,0,1,
+	  0,0,0, 1,0,1, 0,0,1,
+
+	  0,1,0, 1,1,1, 1,1,0,
+	  0,1,0, 0,1,1, 1,1,1,
+
+	  0,0,0, 0,1,1, 0,1,0,
+	  0,0,0, 0,0,1, 0,1,1,
+
+	  1,0,0, 1,1,0, 1,1,1,
+	  1,0,0, 1,1,1, 1,0,1,
+
+	  0,0,1, 1,1,1, 0,1,1,
+	  0,0,1, 1,0,1, 1,1,1
+	].map((n, i) => (i + 1) % 3 ? n - 0.5 : n)), 3))
+	*/
+	var hostGeometry = new BoxGeometry(1, 1, 1);
+	hostGeometry.translate(0, 0, .5);
+
+	var hostMaterials = {
+	  None: new MeshLambertMaterial({
+	    color: 0xcccccc,
+	    transparent: true,
+	    opacity: 0.6
+	  }),
+	  Low: new MeshLambertMaterial({
+	    color: 0xdbbb47
+	  }),
+	  Medium: new MeshLambertMaterial({
+	    color: 0xff8100
+	  }),
+	  High: new MeshLambertMaterial({
+	    color: 0xff0000
+	  })
+	};
+
+	var highlightMaterial = new MeshLambertMaterial({
+	  color: 0x3ba7db
+	});
+
+	({
+	  None: new Color(0xcccccc).getStyle(),
+	  Low: new Color(0xdbbb47).getStyle(),
+	  Medium: new Color(0xff8100).getStyle(),
+	  High: new Color(0xff0000).getStyle()
+	  // None: `rgb(${ 0xcc }, ${ 0xcc }, ${ 0xcc })`,
+	  // Low: `rgb(${ 0xdb }, ${ 0xbb }, ${ 0x47 })`,
+	  // Medium: `rgb(${ 0xff }, ${ 0x81 }, ${ 0x00 })`,
+	  // High: `rgb(${ 0xff }, ${ 0 }, ${ 0 })`
+	  // None: '#cccccc',
+	  // Low: '#dbbb47',
+	  // Medium: '#ff8100',
+	  // High: '#ff0000'
+	});
+
+
+	var Host = /*@__PURE__*/(function (Object3DFacade) {
+	  function Host () {
+	    Object3DFacade.apply(this, arguments);
+	  }
+
+	  if ( Object3DFacade ) Host.__proto__ = Object3DFacade;
+	  Host.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  Host.prototype.constructor = Host;
+
+	  var prototypeAccessors = { height: { configurable: true } };
+
+	  Host.prototype.initThreeObject = function initThreeObject () {
+	    var material = hostMaterials.None; //.clone()
+
+	    var mesh = new Mesh(hostGeometry, material);
+	    mesh.renderOrder = 10; //prevent occlusion by translucent Zone walls
+
+	    return mesh
+	  };
+
+	  prototypeAccessors.height.set = function (h) {
+	    this.scaleZ = h;
+	  };
+	  prototypeAccessors.height.get = function () {
+	    return this.scaleZ
+	  };
+
+	  Host.prototype.afterUpdate = function afterUpdate () {
+	    this.threeObject.material = this.highlight ? highlightMaterial : hostMaterials[this.threatLevel] || hostMaterials.None;
+
+	    /* TODO animatable color/opacity - requires per-instance material which slows things down
+	    this.color = threatColors[this.threatLevel] || threatColors.None
+	    this.opacity = this.threatLevel ? 1 : 0.8
+	    */
+
+	    Object3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  Host.prototype.destructor = function destructor () {
+	    Object3DFacade.prototype.destructor.call(this);
+	    // TODO dispose geometry/material?
+	  };
+
+	  Object.defineProperties( Host.prototype, prototypeAccessors );
+
+	  return Host;
+	}(Object3DFacade));
+
+	var BGCOLOR = '#222';
+
+	var STYLE = {
+	  boxShadow: '0 0 1px rgba(255,255,255,.5)',
+	  background: BGCOLOR,
+	  padding: '5px 10px',
+	  fontSize: '12px',
+	  borderRadius: '5px',
+	  transform: 'translate(-100%, -100%)'
+	};
+
+	var SVG = (
+	  react.createElement( 'svg', {
+	    style: {
+	      position: 'absolute',
+	      bottom: -7,
+	      right: -7,
+	      height: 17,
+	      width: 17
+	    } }, 
+	    react.createElement( 'path', { fill: BGCOLOR, d: "M0,0v10h0.3c2.8,0,6.9,1.3,9.3,2.7c0,0,6.8,3.7,6.8,3.7c0,0-3.7-6.8-3.7-6.8C11.3,7.1,10,3,10,0.2V0H0z" })
+	  )
+	);
+
+
+	function Tooltip(props) {
+	  return (
+	    react.createElement( 'div', { style: STYLE }, 
+	      SVG, 
+	      props.text
+	    )
+	  )
+	}
+
+	var wallsGeometry = new CylinderGeometry(Math.sqrt(2) / 2, Math.sqrt(2) / 2, 1, 4, 1, true)
+	  .rotateY(Math.PI / 4)
+	  .rotateX(Math.PI / 2)
+	  .translate(0.5, 0.5, 0.5);
+
+	var wallsMaterial = new MeshLambertMaterial({
+	  color: 0x3ba7db,
+	  transparent: true,
+	  opacity: 0.5,
+	  side: DoubleSide
+	});
+
+
+	var wallsOutlineGeometry = new BufferGeometry();
+	wallsOutlineGeometry.setAttribute( 'position', new BufferAttribute(new Float32Array([
+	  0,0,1, 0,1,1, 1,1,1, 1,0,1, 0,0,1
+	]), 3));
+
+	var wallsOutlineMaterial = new LineBasicMaterial({
+	  color: 0x3ba7db,
+	  linewidth: 1
+	});
+
+	var Zone = /*@__PURE__*/(function (Object3DFacade) {
+	  function Zone () {
+	    Object3DFacade.apply(this, arguments);
+	  }
+
+	  if ( Object3DFacade ) Zone.__proto__ = Object3DFacade;
+	  Zone.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  Zone.prototype.constructor = Zone;
+
+	  var prototypeAccessors = { width: { configurable: true },length: { configurable: true },height: { configurable: true },label: { configurable: true } };
+
+	  Zone.prototype.initThreeObject = function initThreeObject () {
+	    var group = new Group();
+
+	    // translucent walls
+	    var mesh = new Mesh(wallsGeometry, wallsMaterial);
+	    mesh.renderOrder = 20; //prevent occlusion of translucent Host meshes
+	    group.add(mesh);
+
+	    // bright outline around top of walls
+	    var outline = new Line(wallsOutlineGeometry, wallsOutlineMaterial);
+	    group.add(outline);
+
+	    return group
+	  };
+
+	  prototypeAccessors.width.set = function (w) {
+	    this.scaleX = w;
+	  };
+	  prototypeAccessors.width.get = function () {
+	    return this.scaleX
+	  };
+
+	  prototypeAccessors.length.set = function (l) {
+	    this.scaleY = l;
+	  };
+	  prototypeAccessors.length.get = function () {
+	    return this.scaleY
+	  };
+
+	  prototypeAccessors.height.set = function (h) {
+	    this.scaleZ = h;
+	  };
+	  prototypeAccessors.height.get = function () {
+	    return this.scaleZ
+	  };
+
+	  prototypeAccessors.label.set = function (label) {
+	    if (label !== this._label) {
+	      if (label) {
+	        if (!this.children) {
+	          this.children = [{
+	            key: 'tooltip',
+	            facade: HtmlOverlay3DFacade,
+	            //center - will move along with transform of zone box:
+	            x: 0.5,
+	            y: 0.5,
+	            html: null //set by label setter
+	          }];
+	        }
+	        this.children[0].html = (
+	          react.createElement( Tooltip, { text: label })
+	        );
+	      } else {
+	        this.children = null;
+	      }
+	      this._label = label;
+	    }
+	  };
+
+	/*
+	  afterUpdate() {
+	    let text = this.text
+	    text.text = 'Hello World'
+	    text.x = this.x + this.width / 2
+	    text.y = this.y + 10e-10
+	    text.z = this.height / 2
+	    text.rotateX = Math.PI / 2
+	    text.height = this.height
+	    text.afterUpdate()
+
+	    super.afterUpdate()
+	  }
+	*/
+
+	  Zone.prototype.destructor = function destructor () {
+	    Object3DFacade.prototype.destructor.call(this);
+	    //this.text.destructor()
+	    // TODO dispose geometry/material?
+	  };
+
+	  Object.defineProperties( Zone.prototype, prototypeAccessors );
+
+	  return Zone;
+	}(Object3DFacade));
+
+	var GridCamera = /*@__PURE__*/(function (PerspectiveCamera3DFacade) {
+	  function GridCamera() {
+	    var args = [], len = arguments.length;
+	    while ( len-- ) args[ len ] = arguments[ len ];
+
+	    PerspectiveCamera3DFacade.apply(this, args);
+	    this.fov = 75;
+	    this.near = 0.1;
+	    this.far = 1000;
+	  }
+
+	  if ( PerspectiveCamera3DFacade ) GridCamera.__proto__ = PerspectiveCamera3DFacade;
+	  GridCamera.prototype = Object.create( PerspectiveCamera3DFacade && PerspectiveCamera3DFacade.prototype );
+	  GridCamera.prototype.constructor = GridCamera;
+
+	  GridCamera.prototype.afterUpdate = function afterUpdate () {
+	    this.x = this.distance * Math.sin(this.angle);
+	    this.y = this.distance * Math.cos(this.angle);
+	    this.z = this.elevation;
+
+	    PerspectiveCamera3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return GridCamera;
+	}(PerspectiveCamera3DFacade));
 
 	/**
 	 * Lightweight thenable implementation that is entirely self-contained within a single
@@ -58775,10 +60747,10 @@
 
 	var THICKNESS = 0.25; //rect depth as percentage of height
 
-	var tempMat4$2 = new Matrix4();
+	var tempMat4$4 = new Matrix4();
 	var tempPlane = new Plane();
 	var tempVec2$2 = new Vector2();
-	var tempVec3$3 = new Vector3();
+	var tempVec3$5 = new Vector3();
 	var noClip = Object.freeze([-Infinity, -Infinity, Infinity, Infinity]);
 
 	/**
@@ -58836,8 +60808,8 @@
 	        if (ix && ix.object === textMesh && ix.point) {
 	          textPos = textMesh.worldPositionToTextCoords(ix.point, tempVec2$2);
 	        } else {
-	          var ray = e.ray.clone().applyMatrix4(invertMatrix4(textMesh.matrixWorld, tempMat4$2));
-	          textPos = ray.intersectPlane(tempPlane.setComponents(0, 0, 1, 0), tempVec3$3);
+	          var ray = e.ray.clone().applyMatrix4(invertMatrix4(textMesh.matrixWorld, tempMat4$4));
+	          textPos = ray.intersectPlane(tempPlane.setComponents(0, 0, 1, 0), tempVec3$5);
 	        }
 	        if (textPos) {
 	          var caret = getCaretAtPoint(textRenderInfo, textPos.x, textPos.y);
@@ -59512,7 +61484,7 @@
 	}(ParentFacade));
 
 	var raycastMesh = new Mesh(new PlaneGeometry(1, 1).translate(0.5, -0.5, 0));
-	var tempMat4$3 = new Matrix4();
+	var tempMat4$5 = new Matrix4();
 	var tempVec4$1 = new Vector4(0,0,0,0);
 	var emptyVec4$1 = Object.freeze(new Vector4(0,0,0,0));
 	var tempPlane$1 = new Plane();
@@ -59573,7 +61545,7 @@
 
 	  UIBlock3DFacade.prototype.updateMatrices = function updateMatrices$1 () {
 	    Group3DFacade.prototype.updateMatrices.call(this);
-	    this.layers.traverse(updateMatrices);
+	    this.layers.traverse(updateMatrices$2);
 	  };
 
 	  UIBlock3DFacade.prototype.afterUpdate = function afterUpdate () {
@@ -59858,7 +61830,7 @@
 	    if (offsetWidth && offsetHeight) {
 	      raycastMesh.matrixWorld.multiplyMatrices(
 	        this.threeObject.matrixWorld,
-	        tempMat4$3.makeScale(offsetWidth, offsetHeight, 1)
+	        tempMat4$5.makeScale(offsetWidth, offsetHeight, 1)
 	      );
 	      hits = this._raycastObject(raycastMesh, raycaster);
 	      if (hits) {
@@ -59946,7 +61918,7 @@
 	function dragHandler(e) {
 	  if (!e._didScroll && !e.defaultPrevented) {
 	    var facade = e.currentTarget;
-	    var ray = e.ray.clone().applyMatrix4(invertMatrix4(facade.threeObject.matrixWorld, tempMat4$3));
+	    var ray = e.ray.clone().applyMatrix4(invertMatrix4(facade.threeObject.matrixWorld, tempMat4$5));
 	    var localPos = ray.intersectPlane(tempPlane$1.setComponents(0, 0, 1, 0), new Vector3());
 	    var prevPos = facade._prevDragPos;
 	    if (localPos && prevPos && e.type === 'drag') {
@@ -59979,7 +61951,7 @@
 	  return typeof child === 'string' || typeof child === 'number'
 	}
 
-	function updateMatrices(obj) {
+	function updateMatrices$2(obj) {
 	  if (obj.updateMatrices) {
 	    obj.updateMatrices();
 	  }
@@ -59987,1013 +61959,305 @@
 
 
 
-	var Block = UIBlock3DFacade;
+	var UIBlock3DFacade$1 = UIBlock3DFacade;
 
-	var paleBlueDot = "\"From this distant vantage point, the Earth might not seem of any particular interest. But for us, it's different. Consider again that dot. That's here. That's home. That's us.\n\nOn it everyone you love, everyone you know, everyone you ever heard of, every human being who ever was, lived out their lives.\n\nThe aggregate of our joy and suffering, thousands of confident religions, ideologies, and economic doctrines, every hunter and forager, every hero and coward, every creator and destroyer of civilization, every king and peasant, every young couple in love, every mother and father, hopeful child, inventor and explorer, every teacher of morals, every corrupt politician, every 'superstar,' every 'supreme leader,' every saint and sinner in the history of our species lived there - on a mote of dust suspended in a sunbeam.\"\n\n- Carl Sagan";
+	var objectPath = createCommonjsModule(function (module) {
+	(function (root, factory){
 
-	var cubeMaterial = new MeshStandardMaterial({roughness: 0.7, metalness: 0.7});
-	var cubeMesh = new Mesh(
-	  new BoxGeometry(1, 1, 1),
-	  cubeMaterial
-	);
-	var Cube = /*@__PURE__*/(function (Instanceable3DFacade) {
-	  function Cube(parent) {
-	    Instanceable3DFacade.call(this, parent);
-	    this.color = 0x3ba7db;
+	  /*istanbul ignore next:cant test*/
+	  {
+	    module.exports = factory();
+	  }
+	})(commonjsGlobal, function(){
+
+	  var toStr = Object.prototype.toString;
+	  function hasOwnProperty(obj, prop) {
+	    if(obj == null) {
+	      return false
+	    }
+	    //to handle objects with null prototypes (too edge case?)
+	    return Object.prototype.hasOwnProperty.call(obj, prop)
 	  }
 
-	  if ( Instanceable3DFacade ) Cube.__proto__ = Instanceable3DFacade;
-	  Cube.prototype = Object.create( Instanceable3DFacade && Instanceable3DFacade.prototype );
-	  Cube.prototype.constructor = Cube;
+	  function isEmpty(value){
+	    if (!value) {
+	      return true;
+	    }
+	    if (isArray(value) && value.length === 0) {
+	        return true;
+	    } else if (typeof value !== 'string') {
+	        for (var i in value) {
+	            if (hasOwnProperty(value, i)) {
+	                return false;
+	            }
+	        }
+	        return true;
+	    }
+	    return false;
+	  }
 
-	  var prototypeAccessors = { color: { configurable: true } };
-	  prototypeAccessors.color.set = function (c) {
-	    this.setInstanceUniform('diffuse', new Color(c));
-	    this._color = c;
+	  function toString(type){
+	    return toStr.call(type);
+	  }
+
+	  function isObject(obj){
+	    return typeof obj === 'object' && toString(obj) === "[object Object]";
+	  }
+
+	  var isArray = Array.isArray || function(obj){
+	    /*istanbul ignore next:cant test*/
+	    return toStr.call(obj) === '[object Array]';
 	  };
-	  prototypeAccessors.color.get = function () {
-	    return this._color
-	  };
 
-	  Object.defineProperties( Cube.prototype, prototypeAccessors );
+	  function isBoolean(obj){
+	    return typeof obj === 'boolean' || toString(obj) === '[object Boolean]';
+	  }
 
-	  return Cube;
-	}(Instanceable3DFacade));
-	Cube.prototype.instancedThreeObject = cubeMesh;
+	  function getKey(key){
+	    var intKey = parseInt(key);
+	    if (intKey.toString() === key) {
+	      return intKey;
+	    }
+	    return key;
+	  }
 
+	  function factory(options) {
+	    options = options || {};
 
-	var anim = {
-	  from: {rotateX: -Math.PI, rotateY: -Math.PI, rotateZ: -Math.PI},
-	  to: {rotateX: Math.PI, rotateY: Math.PI, rotateZ: Math.PI},
-	  duration: 10000,
-	  iterations: Infinity
-	};
-	var animPaused = Object.assign({paused: true}, anim);
+	    var objectPath = function(obj) {
+	      return Object.keys(objectPath).reduce(function(proxy, prop) {
+	        if(prop === 'create') {
+	          return proxy;
+	        }
 
+	        /*istanbul ignore else*/
+	        if (typeof objectPath[prop] === 'function') {
+	          proxy[prop] = objectPath[prop].bind(objectPath, obj);
+	        }
 
-	var CubeOfCubes = /*@__PURE__*/(function (Group3DFacade) {
-	  function CubeOfCubes(parent) {
-	    var this$1 = this;
+	        return proxy;
+	      }, {});
+	    };
 
-	    Group3DFacade.call(this, parent);
-	    this.selectedColor = null;
+	    var hasShallowProperty;
+	    if (options.includeInheritedProps) {
+	      hasShallowProperty = function () {
+	        return true
+	      };
+	    } else {
+	      hasShallowProperty = function (obj, prop) {
+	        return (typeof prop === 'number' && Array.isArray(obj)) || hasOwnProperty(obj, prop)
+	      };
+	    }
 
-	    var count = 4;
-	    var cubesData = [];
-	    for (var x = 0; x < count; x++) {
-	      for (var y = 0; y < count; y++) {
-	        for (var z = 0; z < count; z++) {
-	          if (x*y*z === 0 || x === count-1 || y === count-1 || z === count-1) {
-	            cubesData.push({
-	              color: ((64 + x / count * 128) << 16) | ((64 + y / count * 128) << 8) | (64 + z / count * 128),
-	              x: -0.5 + x / (count - 1),
-	              y: -0.5 + y / (count - 1),
-	              z: -0.5 + z / (count - 1)
-	            });
+	    function getShallowProperty(obj, prop) {
+	      if (hasShallowProperty(obj, prop)) {
+	        return obj[prop];
+	      }
+	    }
+
+	    function set(obj, path, value, doNotReplace){
+	      if (typeof path === 'number') {
+	        path = [path];
+	      }
+	      if (!path || path.length === 0) {
+	        return obj;
+	      }
+	      if (typeof path === 'string') {
+	        return set(obj, path.split('.').map(getKey), value, doNotReplace);
+	      }
+	      var currentPath = path[0];
+	      var currentValue = getShallowProperty(obj, currentPath);
+	      if (options.includeInheritedProps && (currentPath === '__proto__' ||
+	        (currentPath === 'constructor' && typeof currentValue === 'function'))) {
+	        throw new Error('For security reasons, object\'s magic properties cannot be set')
+	      }
+	      if (path.length === 1) {
+	        if (currentValue === void 0 || !doNotReplace) {
+	          obj[currentPath] = value;
+	        }
+	        return currentValue;
+	      }
+
+	      if (currentValue === void 0) {
+	        //check if we assume an array
+	        if(typeof path[1] === 'number') {
+	          obj[currentPath] = [];
+	        } else {
+	          obj[currentPath] = {};
+	        }
+	      }
+
+	      return set(obj[currentPath], path.slice(1), value, doNotReplace);
+	    }
+
+	    objectPath.has = function (obj, path) {
+	      if (typeof path === 'number') {
+	        path = [path];
+	      } else if (typeof path === 'string') {
+	        path = path.split('.');
+	      }
+
+	      if (!path || path.length === 0) {
+	        return !!obj;
+	      }
+
+	      for (var i = 0; i < path.length; i++) {
+	        var j = getKey(path[i]);
+
+	        if((typeof j === 'number' && isArray(obj) && j < obj.length) ||
+	          (options.includeInheritedProps ? (j in Object(obj)) : hasOwnProperty(obj, j))) {
+	          obj = obj[j];
+	        } else {
+	          return false;
+	        }
+	      }
+
+	      return true;
+	    };
+
+	    objectPath.ensureExists = function (obj, path, value){
+	      return set(obj, path, value, true);
+	    };
+
+	    objectPath.set = function (obj, path, value, doNotReplace){
+	      return set(obj, path, value, doNotReplace);
+	    };
+
+	    objectPath.insert = function (obj, path, value, at){
+	      var arr = objectPath.get(obj, path);
+	      at = ~~at;
+	      if (!isArray(arr)) {
+	        arr = [];
+	        objectPath.set(obj, path, arr);
+	      }
+	      arr.splice(at, 0, value);
+	    };
+
+	    objectPath.empty = function(obj, path) {
+	      if (isEmpty(path)) {
+	        return void 0;
+	      }
+	      if (obj == null) {
+	        return void 0;
+	      }
+
+	      var value, i;
+	      if (!(value = objectPath.get(obj, path))) {
+	        return void 0;
+	      }
+
+	      if (typeof value === 'string') {
+	        return objectPath.set(obj, path, '');
+	      } else if (isBoolean(value)) {
+	        return objectPath.set(obj, path, false);
+	      } else if (typeof value === 'number') {
+	        return objectPath.set(obj, path, 0);
+	      } else if (isArray(value)) {
+	        value.length = 0;
+	      } else if (isObject(value)) {
+	        for (i in value) {
+	          if (hasShallowProperty(value, i)) {
+	            delete value[i];
 	          }
 	        }
+	      } else {
+	        return objectPath.set(obj, path, null);
 	      }
-	    }
-	    this.children = this._childDef = {
-	      facade: Group3DFacade,
-	      animation: anim,
-	      children: {
-	        facade: List,
-	        data: cubesData,
-	        template: {
-	          key: function (d) { return d.color; },
-	          facade: Cube,
-	          color: function (d) { return d.color; },
-	          x: function (d) { return this$1.selectedColor === d.color ? 0 : d.x; },
-	          y: function (d) { return this$1.selectedColor === d.color ? 0 : d.y; },
-	          z: function (d) { return this$1.selectedColor === d.color ? 0 : d.z; },
-	          scale: function (d) { return this$1.selectedColor === d.color ? 1.3 : 1 / (count - 1) / 2; },
-	          pointerStates: function (d) { return this$1.selectedColor ? {} : {
-	            hover: {
-	              //color: 0xffffff,
-	              scale: 1 / (count - 1) / 1.6
-	            }
-	          }; },
-	          pointerEvents: true,
-	          transition: {
-	            x: {duration: 500, easing: 'easeOutBounce'},
-	            y: {duration: 500, easing: 'easeOutBounce'},
-	            z: {duration: 500, easing: 'easeOutBounce'},
-	            scale: {duration: 500, easing: 'easeOutBounce'}
-	          }
+	    };
+
+	    objectPath.push = function (obj, path /*, values */){
+	      var arr = objectPath.get(obj, path);
+	      if (!isArray(arr)) {
+	        arr = [];
+	        objectPath.set(obj, path, arr);
+	      }
+
+	      arr.push.apply(arr, Array.prototype.slice.call(arguments, 2));
+	    };
+
+	    objectPath.coalesce = function (obj, paths, defaultValue) {
+	      var value;
+
+	      for (var i = 0, len = paths.length; i < len; i++) {
+	        if ((value = objectPath.get(obj, paths[i])) !== void 0) {
+	          return value;
 	        }
 	      }
+
+	      return defaultValue;
 	    };
 
-	    this.onMouseOver = function (e) {
-	      this$1.hovering = true;
-	      this$1.afterUpdate();
-	    };
-	    this.onMouseOut = function (e) {
-	      this$1.hovering = false;
-	      this$1.afterUpdate();
-	    };
-	    this.onClick = function (e) {
-	      this$1.onSelectColor(this$1.selectedColor == null ? e.target.color : null);
-	    };
-	  }
-
-	  if ( Group3DFacade ) CubeOfCubes.__proto__ = Group3DFacade;
-	  CubeOfCubes.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
-	  CubeOfCubes.prototype.constructor = CubeOfCubes;
-
-	  CubeOfCubes.prototype.afterUpdate = function afterUpdate () {
-	    var childDef = this._childDef;
-	    this.threeObject.visible = this.offsetWidth != null;
-	    childDef.animation = (this.hovering) ? animPaused : anim;
-
-	    // Center within the layed out box
-	    this.x = this.offsetLeft + this.offsetWidth / 2;
-	    this.y = -(this.offsetTop + this.offsetHeight / 2);
-	    childDef.scale = Math.min(this.clientWidth, this.clientHeight) / Math.sqrt(2);
-	    Group3DFacade.prototype.afterUpdate.call(this);
-	  };
-
-	  return CubeOfCubes;
-	}(Group3DFacade));
-
-	var ColorCubes = extendAsFlexNode(CubeOfCubes);
-
-	var geom;
-
-
-	var Globe = /*@__PURE__*/(function (Object3DFacade) {
-	  function Globe () {
-	    Object3DFacade.apply(this, arguments);
-	  }
-
-	  if ( Object3DFacade ) Globe.__proto__ = Object3DFacade;
-	  Globe.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
-	  Globe.prototype.constructor = Globe;
-
-	  var prototypeAccessors = { texture: { configurable: true } };
-
-	  Globe.prototype.initThreeObject = function initThreeObject () {
-	    return new Mesh(
-	      geom || (geom = new SphereGeometry(0.5, 64, 64)),
-	      new MeshStandardMaterial({
-	        roughness: 0.5,
-	        metalness: 0.5
-	      })
-	    )
-	  };
-
-	  prototypeAccessors.texture.set = function (val) {
-	    if (val !== this._texture) {
-	      this._texture = val;
-	      var material = this.threeObject.material;
-	      if (material.map) {
-	        material.map.dispose();
+	    objectPath.get = function (obj, path, defaultValue){
+	      if (typeof path === 'number') {
+	        path = [path];
 	      }
-	      material.map = val;
-	    }
-	  };
+	      if (!path || path.length === 0) {
+	        return obj;
+	      }
+	      if (obj == null) {
+	        return defaultValue;
+	      }
+	      if (typeof path === 'string') {
+	        return objectPath.get(obj, path.split('.'), defaultValue);
+	      }
 
-	  Object.defineProperties( Globe.prototype, prototypeAccessors );
+	      var currentPath = getKey(path[0]);
+	      var nextObj = getShallowProperty(obj, currentPath);
+	      if (nextObj === void 0) {
+	        return defaultValue;
+	      }
 
-	  return Globe;
-	}(Object3DFacade));
+	      if (path.length === 1) {
+	        return nextObj;
+	      }
 
-
-	var FlexboxGlobe = /*@__PURE__*/(function (Group3DFacade) {
-	  function FlexboxGlobe(parent) {
-	    Group3DFacade.call(this, parent);
-	    this._childDef = {
-	      facade: Globe
+	      return objectPath.get(obj[currentPath], path.slice(1), defaultValue);
 	    };
-	  }
 
-	  if ( Group3DFacade ) FlexboxGlobe.__proto__ = Group3DFacade;
-	  FlexboxGlobe.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
-	  FlexboxGlobe.prototype.constructor = FlexboxGlobe;
+	    objectPath.del = function del(obj, path) {
+	      if (typeof path === 'number') {
+	        path = [path];
+	      }
 
-	  FlexboxGlobe.prototype.afterUpdate = function afterUpdate () {
-	    var childDef = this._childDef;
-	    this.children = this.offsetWidth == null ? null : childDef;
+	      if (obj == null) {
+	        return obj;
+	      }
 
-	    // Center the globe within the layed out box
-	    this.x = this.offsetLeft + this.offsetWidth / 2;
-	    this.y = -(this.offsetTop + this.offsetHeight / 2);
-	    childDef.scale = Math.min(this.clientWidth, this.clientHeight);
-	    childDef.texture = this.texture;
-	    Group3DFacade.prototype.afterUpdate.call(this);
-	  };
+	      if (isEmpty(path)) {
+	        return obj;
+	      }
+	      if(typeof path === 'string') {
+	        return objectPath.del(obj, path.split('.'));
+	      }
 
-	  return FlexboxGlobe;
-	}(Group3DFacade));
+	      var currentPath = getKey(path[0]);
+	      if (!hasShallowProperty(obj, currentPath)) {
+	        return obj;
+	      }
 
-	var FlexboxGlobe$1 = extendAsFlexNode(FlexboxGlobe);
-
-	function clone(point) { //TODO: use gl-vec2 for this
-	    return [point[0], point[1]]
-	}
-
-	function vec2(x, y) {
-	    return [x, y]
-	}
-
-	var _function = function createBezierBuilder(opt) {
-	    opt = opt||{};
-
-	    var RECURSION_LIMIT = typeof opt.recursion === 'number' ? opt.recursion : 8;
-	    var FLT_EPSILON = typeof opt.epsilon === 'number' ? opt.epsilon : 1.19209290e-7;
-	    var PATH_DISTANCE_EPSILON = typeof opt.pathEpsilon === 'number' ? opt.pathEpsilon : 1.0;
-
-	    var curve_angle_tolerance_epsilon = typeof opt.angleEpsilon === 'number' ? opt.angleEpsilon : 0.01;
-	    var m_angle_tolerance = opt.angleTolerance || 0;
-	    var m_cusp_limit = opt.cuspLimit || 0;
-
-	    return function bezierCurve(start, c1, c2, end, scale, points) {
-	        if (!points)
-	            { points = []; }
-
-	        scale = typeof scale === 'number' ? scale : 1.0;
-	        var distanceTolerance = PATH_DISTANCE_EPSILON / scale;
-	        distanceTolerance *= distanceTolerance;
-	        begin(start, c1, c2, end, points, distanceTolerance);
-	        return points
-	    }
-
-
-	    ////// Based on:
-	    ////// https://github.com/pelson/antigrain/blob/master/agg-2.4/src/agg_curves.cpp
-
-	    function begin(start, c1, c2, end, points, distanceTolerance) {
-	        points.push(clone(start));
-	        var x1 = start[0],
-	            y1 = start[1],
-	            x2 = c1[0],
-	            y2 = c1[1],
-	            x3 = c2[0],
-	            y3 = c2[1],
-	            x4 = end[0],
-	            y4 = end[1];
-	        recursive(x1, y1, x2, y2, x3, y3, x4, y4, points, distanceTolerance, 0);
-	        points.push(clone(end));
-	    }
-
-	    function recursive(x1, y1, x2, y2, x3, y3, x4, y4, points, distanceTolerance, level) {
-	        if(level > RECURSION_LIMIT) 
-	            { return }
-
-	        var pi = Math.PI;
-
-	        // Calculate all the mid-points of the line segments
-	        //----------------------
-	        var x12   = (x1 + x2) / 2;
-	        var y12   = (y1 + y2) / 2;
-	        var x23   = (x2 + x3) / 2;
-	        var y23   = (y2 + y3) / 2;
-	        var x34   = (x3 + x4) / 2;
-	        var y34   = (y3 + y4) / 2;
-	        var x123  = (x12 + x23) / 2;
-	        var y123  = (y12 + y23) / 2;
-	        var x234  = (x23 + x34) / 2;
-	        var y234  = (y23 + y34) / 2;
-	        var x1234 = (x123 + x234) / 2;
-	        var y1234 = (y123 + y234) / 2;
-
-	        if(level > 0) { // Enforce subdivision first time
-	            // Try to approximate the full cubic curve by a single straight line
-	            //------------------
-	            var dx = x4-x1;
-	            var dy = y4-y1;
-
-	            var d2 = Math.abs((x2 - x4) * dy - (y2 - y4) * dx);
-	            var d3 = Math.abs((x3 - x4) * dy - (y3 - y4) * dx);
-
-	            var da1, da2;
-
-	            if(d2 > FLT_EPSILON && d3 > FLT_EPSILON) {
-	                // Regular care
-	                //-----------------
-	                if((d2 + d3)*(d2 + d3) <= distanceTolerance * (dx*dx + dy*dy)) {
-	                    // If the curvature doesn't exceed the distanceTolerance value
-	                    // we tend to finish subdivisions.
-	                    //----------------------
-	                    if(m_angle_tolerance < curve_angle_tolerance_epsilon) {
-	                        points.push(vec2(x1234, y1234));
-	                        return
-	                    }
-
-	                    // Angle & Cusp Condition
-	                    //----------------------
-	                    var a23 = Math.atan2(y3 - y2, x3 - x2);
-	                    da1 = Math.abs(a23 - Math.atan2(y2 - y1, x2 - x1));
-	                    da2 = Math.abs(Math.atan2(y4 - y3, x4 - x3) - a23);
-	                    if(da1 >= pi) { da1 = 2*pi - da1; }
-	                    if(da2 >= pi) { da2 = 2*pi - da2; }
-
-	                    if(da1 + da2 < m_angle_tolerance) {
-	                        // Finally we can stop the recursion
-	                        //----------------------
-	                        points.push(vec2(x1234, y1234));
-	                        return
-	                    }
-
-	                    if(m_cusp_limit !== 0.0) {
-	                        if(da1 > m_cusp_limit) {
-	                            points.push(vec2(x2, y2));
-	                            return
-	                        }
-
-	                        if(da2 > m_cusp_limit) {
-	                            points.push(vec2(x3, y3));
-	                            return
-	                        }
-	                    }
-	                }
-	            }
-	            else {
-	                if(d2 > FLT_EPSILON) {
-	                    // p1,p3,p4 are collinear, p2 is considerable
-	                    //----------------------
-	                    if(d2 * d2 <= distanceTolerance * (dx*dx + dy*dy)) {
-	                        if(m_angle_tolerance < curve_angle_tolerance_epsilon) {
-	                            points.push(vec2(x1234, y1234));
-	                            return
-	                        }
-
-	                        // Angle Condition
-	                        //----------------------
-	                        da1 = Math.abs(Math.atan2(y3 - y2, x3 - x2) - Math.atan2(y2 - y1, x2 - x1));
-	                        if(da1 >= pi) { da1 = 2*pi - da1; }
-
-	                        if(da1 < m_angle_tolerance) {
-	                            points.push(vec2(x2, y2));
-	                            points.push(vec2(x3, y3));
-	                            return
-	                        }
-
-	                        if(m_cusp_limit !== 0.0) {
-	                            if(da1 > m_cusp_limit) {
-	                                points.push(vec2(x2, y2));
-	                                return
-	                            }
-	                        }
-	                    }
-	                }
-	                else if(d3 > FLT_EPSILON) {
-	                    // p1,p2,p4 are collinear, p3 is considerable
-	                    //----------------------
-	                    if(d3 * d3 <= distanceTolerance * (dx*dx + dy*dy)) {
-	                        if(m_angle_tolerance < curve_angle_tolerance_epsilon) {
-	                            points.push(vec2(x1234, y1234));
-	                            return
-	                        }
-
-	                        // Angle Condition
-	                        //----------------------
-	                        da1 = Math.abs(Math.atan2(y4 - y3, x4 - x3) - Math.atan2(y3 - y2, x3 - x2));
-	                        if(da1 >= pi) { da1 = 2*pi - da1; }
-
-	                        if(da1 < m_angle_tolerance) {
-	                            points.push(vec2(x2, y2));
-	                            points.push(vec2(x3, y3));
-	                            return
-	                        }
-
-	                        if(m_cusp_limit !== 0.0) {
-	                            if(da1 > m_cusp_limit)
-	                            {
-	                                points.push(vec2(x3, y3));
-	                                return
-	                            }
-	                        }
-	                    }
-	                }
-	                else {
-	                    // Collinear case
-	                    //-----------------
-	                    dx = x1234 - (x1 + x4) / 2;
-	                    dy = y1234 - (y1 + y4) / 2;
-	                    if(dx*dx + dy*dy <= distanceTolerance) {
-	                        points.push(vec2(x1234, y1234));
-	                        return
-	                    }
-	                }
-	            }
+	      if(path.length === 1) {
+	        if (isArray(obj)) {
+	          obj.splice(currentPath, 1);
+	        } else {
+	          delete obj[currentPath];
 	        }
-
-	        // Continue subdivision
-	        //----------------------
-	        recursive(x1, y1, x12, y12, x123, y123, x1234, y1234, points, distanceTolerance, level + 1); 
-	        recursive(x1234, y1234, x234, y234, x34, y34, x4, y4, points, distanceTolerance, level + 1); 
-	    }
-	};
-
-	var adaptiveBezierCurve = _function();
-
-	var inherits_browser = createCommonjsModule(function (module) {
-	if (typeof Object.create === 'function') {
-	  // implementation from standard node.js 'util' module
-	  module.exports = function inherits(ctor, superCtor) {
-	    ctor.super_ = superCtor;
-	    ctor.prototype = Object.create(superCtor.prototype, {
-	      constructor: {
-	        value: ctor,
-	        enumerable: false,
-	        writable: true,
-	        configurable: true
+	      } else {
+	        return objectPath.del(obj[currentPath], path.slice(1));
 	      }
-	    });
-	  };
-	} else {
-	  // old school shim for old browsers
-	  module.exports = function inherits(ctor, superCtor) {
-	    ctor.super_ = superCtor;
-	    var TempCtor = function () {};
-	    TempCtor.prototype = superCtor.prototype;
-	    ctor.prototype = new TempCtor();
-	    ctor.prototype.constructor = ctor;
-	  };
-	}
+
+	      return obj;
+	    };
+
+	    return objectPath;
+	  }
+
+	  var mod = factory();
+	  mod.create = factory;
+	  mod.withInheritedProps = factory({includeInheritedProps: true});
+	  return mod;
 	});
-
-	var add_1 = add;
-
-	/**
-	 * Adds two vec2's
-	 *
-	 * @param {vec2} out the receiving vector
-	 * @param {vec2} a the first operand
-	 * @param {vec2} b the second operand
-	 * @returns {vec2} out
-	 */
-	function add(out, a, b) {
-	    out[0] = a[0] + b[0];
-	    out[1] = a[1] + b[1];
-	    return out
-	}
-
-	var set_1 = set;
-
-	/**
-	 * Set the components of a vec2 to the given values
-	 *
-	 * @param {vec2} out the receiving vector
-	 * @param {Number} x X component
-	 * @param {Number} y Y component
-	 * @returns {vec2} out
-	 */
-	function set(out, x, y) {
-	    out[0] = x;
-	    out[1] = y;
-	    return out
-	}
-
-	var normalize_1 = normalize;
-
-	/**
-	 * Normalize a vec2
-	 *
-	 * @param {vec2} out the receiving vector
-	 * @param {vec2} a vector to normalize
-	 * @returns {vec2} out
-	 */
-	function normalize(out, a) {
-	    var x = a[0],
-	        y = a[1];
-	    var len = x*x + y*y;
-	    if (len > 0) {
-	        //TODO: evaluate use of glm_invsqrt here?
-	        len = 1 / Math.sqrt(len);
-	        out[0] = a[0] * len;
-	        out[1] = a[1] * len;
-	    }
-	    return out
-	}
-
-	var subtract_1 = subtract;
-
-	/**
-	 * Subtracts vector b from vector a
-	 *
-	 * @param {vec2} out the receiving vector
-	 * @param {vec2} a the first operand
-	 * @param {vec2} b the second operand
-	 * @returns {vec2} out
-	 */
-	function subtract(out, a, b) {
-	    out[0] = a[0] - b[0];
-	    out[1] = a[1] - b[1];
-	    return out
-	}
-
-	var dot_1 = dot;
-
-	/**
-	 * Calculates the dot product of two vec2's
-	 *
-	 * @param {vec2} a the first operand
-	 * @param {vec2} b the second operand
-	 * @returns {Number} dot product of a and b
-	 */
-	function dot(a, b) {
-	    return a[0] * b[0] + a[1] * b[1]
-	}
-
-	var tmp$1 = [0, 0];
-
-	var computeMiter = function computeMiter(tangent, miter, lineA, lineB, halfThick) {
-	    //get tangent line
-	    add_1(tangent, lineA, lineB);
-	    normalize_1(tangent, tangent);
-
-	    //get miter as a unit vector
-	    set_1(miter, -tangent[1], tangent[0]);
-	    set_1(tmp$1, -lineA[1], lineA[0]);
-
-	    //get the necessary length of our miter
-	    return halfThick / dot_1(miter, tmp$1)
-	};
-
-	var normal = function normal(out, dir) {
-	    //get perpendicular
-	    set_1(out, -dir[1], dir[0]);
-	    return out
-	};
-
-	var direction = function direction(out, a, b) {
-	    //get unit dir of two lines
-	    subtract_1(out, a, b);
-	    normalize_1(out, out);
-	    return out
-	};
-
-	var polylineMiterUtil = {
-		computeMiter: computeMiter,
-		normal: normal,
-		direction: direction
-	};
-
-	var lineA = [0, 0];
-	var lineB = [0, 0];
-	var tangent = [0, 0];
-	var miter = [0, 0];
-
-	var polylineNormals = function(points, closed) {
-	    var curNormal = null;
-	    var out = [];
-	    if (closed) {
-	        points = points.slice();
-	        points.push(points[0]);
-	    }
-
-	    var total = points.length;
-	    for (var i=1; i<total; i++) {
-	        var last = points[i-1];
-	        var cur = points[i];
-	        var next = i<points.length-1 ? points[i+1] : null;
-
-	        polylineMiterUtil.direction(lineA, cur, last);
-	        if (!curNormal)  {
-	            curNormal = [0, 0];
-	            polylineMiterUtil.normal(curNormal, lineA);
-	        }
-
-	        if (i === 1) //add initial normals
-	            { addNext(out, curNormal, 1); }
-
-	        if (!next) { //no miter, simple segment
-	            polylineMiterUtil.normal(curNormal, lineA); //reset normal
-	            addNext(out, curNormal, 1);
-	        } else { //miter with last
-	            //get unit dir of next line
-	            polylineMiterUtil.direction(lineB, next, cur);
-
-	            //stores tangent & miter
-	            var miterLen = polylineMiterUtil.computeMiter(tangent, miter, lineA, lineB, 1);
-	            addNext(out, miter, miterLen);
-	        }
-	    }
-
-	    //if the polyline is a closed loop, clean up the last normal
-	    if (points.length > 2 && closed) {
-	        var last2 = points[total-2];
-	        var cur2 = points[0];
-	        var next2 = points[1];
-
-	        polylineMiterUtil.direction(lineA, cur2, last2);
-	        polylineMiterUtil.direction(lineB, next2, cur2);
-	        polylineMiterUtil.normal(curNormal, lineA);
-	        
-	        var miterLen2 = polylineMiterUtil.computeMiter(tangent, miter, lineA, lineB, 1);
-	        out[0][0] = miter.slice();
-	        out[total-1][0] = miter.slice();
-	        out[0][1] = miterLen2;
-	        out[total-1][1] = miterLen2;
-	        out.pop();
-	    }
-
-	    return out
-	};
-
-	function addNext(out, normal, length) {
-	    out.push([[normal[0], normal[1]], length]);
-	}
-
-	var VERTS_PER_POINT = 2;
-
-	var threeLine2d = function createLineMesh (THREE) {
-	  function LineMesh (path, opt) {
-	    if (!(this instanceof LineMesh)) {
-	      return new LineMesh(path, opt);
-	    }
-	    THREE.BufferGeometry.call(this);
-
-	    if (Array.isArray(path)) {
-	      opt = opt || {};
-	    } else if (typeof path === 'object') {
-	      opt = path;
-	      path = [];
-	    }
-
-	    opt = opt || {};
-
-	    this.addAttribute('position', new THREE.BufferAttribute(undefined, 3));
-	    this.addAttribute('lineNormal', new THREE.BufferAttribute(undefined, 2));
-	    this.addAttribute('lineMiter', new THREE.BufferAttribute(undefined, 1));
-	    if (opt.distances) {
-	      this.addAttribute('lineDistance', new THREE.BufferAttribute(undefined, 1));
-	    }
-	    if (typeof this.setIndex === 'function') {
-	      this.setIndex(new THREE.BufferAttribute(undefined, 1));
-	    } else {
-	      this.addAttribute('index', new THREE.BufferAttribute(undefined, 1));
-	    }
-	    this.update(path, opt.closed);
-	  }
-
-	  inherits_browser(LineMesh, THREE.BufferGeometry);
-
-	  LineMesh.prototype.update = function (path, closed) {
-	    path = path || [];
-	    var normals = polylineNormals(path, closed);
-
-	    if (closed) {
-	      path = path.slice();
-	      path.push(path[0]);
-	      normals.push(normals[0]);
-	    }
-
-	    var attrPosition = this.getAttribute('position');
-	    var attrNormal = this.getAttribute('lineNormal');
-	    var attrMiter = this.getAttribute('lineMiter');
-	    var attrDistance = this.getAttribute('lineDistance');
-	    var attrIndex = typeof this.getIndex === 'function' ? this.getIndex() : this.getAttribute('index');
-
-	    var indexCount = Math.max(0, (path.length - 1) * 6);
-	    if (!attrPosition.array ||
-	        (path.length !== attrPosition.array.length / 3 / VERTS_PER_POINT)) {
-	      var count = path.length * VERTS_PER_POINT;
-	      attrPosition.array = new Float32Array(count * 3);
-	      attrNormal.array = new Float32Array(count * 2);
-	      attrMiter.array = new Float32Array(count);
-	      attrIndex.array = new Uint16Array(indexCount);
-
-	      if (attrDistance) {
-	        attrDistance.array = new Float32Array(count);
-	      }
-	    }
-
-	    if (undefined !== attrPosition.count) {
-	      attrPosition.count = count;
-	    }
-	    attrPosition.needsUpdate = true;
-
-	    if (undefined !== attrNormal.count) {
-	      attrNormal.count = count;
-	    }
-	    attrNormal.needsUpdate = true;
-
-	    if (undefined !== attrMiter.count) {
-	      attrMiter.count = count;
-	    }
-	    attrMiter.needsUpdate = true;
-
-	    if (undefined !== attrIndex.count) {
-	      attrIndex.count = indexCount;
-	    }
-	    attrIndex.needsUpdate = true;
-
-	    if (attrDistance) {
-	      if (undefined !== attrDistance.count) {
-	        attrDistance.count = count;
-	      }
-	      attrDistance.needsUpdate = true;
-	    }
-
-	    var index = 0;
-	    var c = 0;
-	    var dIndex = 0;
-	    var indexArray = attrIndex.array;
-
-	    path.forEach(function (point, pointIndex, list) {
-	      var i = index;
-	      indexArray[c++] = i + 0;
-	      indexArray[c++] = i + 1;
-	      indexArray[c++] = i + 2;
-	      indexArray[c++] = i + 2;
-	      indexArray[c++] = i + 1;
-	      indexArray[c++] = i + 3;
-
-	      attrPosition.setXYZ(index++, point[0], point[1], 0);
-	      attrPosition.setXYZ(index++, point[0], point[1], 0);
-
-	      if (attrDistance) {
-	        var d = pointIndex / (list.length - 1);
-	        attrDistance.setX(dIndex++, d);
-	        attrDistance.setX(dIndex++, d);
-	      }
-	    });
-
-	    var nIndex = 0;
-	    var mIndex = 0;
-	    normals.forEach(function (n) {
-	      var norm = n[0];
-	      var miter = n[1];
-	      attrNormal.setXY(nIndex++, norm[0], norm[1]);
-	      attrNormal.setXY(nIndex++, norm[0], norm[1]);
-
-	      attrMiter.setX(mIndex++, -miter);
-	      attrMiter.setX(mIndex++, miter);
-	    });
-	  };
-
-	  return LineMesh;
-	};
-
-	var Line2DGeometry = threeLine2d({BufferAttribute: BufferAttribute, BufferGeometry: BufferGeometry});
-
-	var PatchedLine2DGeometry = /*@__PURE__*/(function (Line2DGeometry) {
-	  function PatchedLine2DGeometry () {
-	    Line2DGeometry.apply(this, arguments);
-	  }
-
-	  if ( Line2DGeometry ) PatchedLine2DGeometry.__proto__ = Line2DGeometry;
-	  PatchedLine2DGeometry.prototype = Object.create( Line2DGeometry && Line2DGeometry.prototype );
-	  PatchedLine2DGeometry.prototype.constructor = PatchedLine2DGeometry;
-
-	  PatchedLine2DGeometry.prototype.addAttribute = function addAttribute () {
-	    var ref;
-
-	    var args = [], len = arguments.length;
-	    while ( len-- ) args[ len ] = arguments[ len ];
-	    if (this.setAttribute) {
-	      return (ref = this).setAttribute.apply(ref, args)
-	    } else {
-	      return Line2DGeometry.prototype.setAttribute.apply(this, args)
-	    }
-	  };
-
-	  // Patch overwriting of BufferAttribute.array, which is no longer supported and causes errors:
-	  PatchedLine2DGeometry.prototype.update = function update () {
-	    var this$1 = this;
-	    var args = [], len = arguments.length;
-	    while ( len-- ) args[ len ] = arguments[ len ];
-
-	    // Store previous arrays:
-	    var indexArray = this.getIndex().array;
-	    var attrArrays = {};
-	    Object.keys(this.attributes).forEach(function (name) {
-	      attrArrays[name] = this$1.getAttribute(name).array;
-	    });
-
-	    var result = Line2DGeometry.prototype.update.apply(this, args);
-
-	    // If any attribute's array was changed, replace that whole attribute:
-	    Object.keys(this.attributes).forEach(function (name) {
-	      if (attrArrays[name] && attrArrays[name] !== this$1.getAttribute(name).array) {
-	        this$1.setAttribute(name, this$1.getAttribute(name).clone());
-	      }
-	    });
-	    if (indexArray && indexArray !== this.getIndex().array) {
-	      this.setIndex(this.getIndex().clone());
-	    }
-
-	    return result
-	  };
-
-	  return PatchedLine2DGeometry;
-	}(Line2DGeometry));
-
-	var strokeVertexShader = "\n// Basic three-line-2d vertex shader for the line stroke\n\nuniform float thickness;\nattribute float lineMiter;\nattribute vec2 lineNormal;\n\nvoid main() {\n  vec3 pointPos = position.xyz + vec3(lineNormal * thickness / 2.0 * lineMiter, 0.0);\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(pointPos, 1.0);\n}\n";
-
-	var strokeFragmentShader = "\n// Basic three-line-2d fragment shader for the line stroke\n\nuniform vec3 color;\nuniform float opacity;\n\nvoid main() {\n  gl_FragColor = vec4(color, opacity);\n}\n";
-
-	var fillVertexShader = "\n// Vertex shader for the three-line-2d geometry that drops its down-facing vertices\n// to the bottom line, thereby creating a mesh covering the curve's fill area\n\nuniform int gradientScale; //0 = per value, 1 = max value\nuniform float maxY;\n\nattribute float lineMiter;\n\nvarying float varGradientTopY;\nvarying float varY;\n\nvoid main() {\n  // Drop all vertexes forming the bottom of triangles down to y:0\n  float y = lineMiter < 0.0 ? 0.0 : position.y;\n\n  // Pass along values for gradient distance calculation\n  varGradientTopY = gradientScale == 1 ? maxY : position.y;\n  varY = y;\n\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, y, 0.0, 1.0);\n}\n";
-
-	var fillFragmentShader = "\n// Fragment shader for the curve's fill area. Handles both solid color and gradient fill styles.\n\nuniform vec3 color;\nuniform float opacity;\nuniform float gradientPercent;\nuniform float gradientExp;\n\nvarying float varGradientTopY;\nvarying float varY;\n\nvoid main() {\n  float alpha = opacity;\n\n  // If a gradient is defined, calculate the varying opacity for the current y value\n  if (gradientPercent > 0.0) {\n    float gradPos = smoothstep(varGradientTopY - varGradientTopY * gradientPercent, varGradientTopY, varY);\n    alpha = opacity * pow(gradPos, max(gradientExp, 1.0));\n  }\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
-
-	// Given an array of y values, construct a smooth curve connecting those points.
-	function valuesToCurvePoints(values, totalWidth, totalHeight) {
-	  var p1 = [];
-	  var c1 = [];
-	  var c2 = [];
-	  var p2 = [];
-	  var maxValue = Math.max.apply(Math, values);
-	  var curveValues = [];
-	  for (var i = 1; i < values.length; i++) {
-	    var xMult = totalWidth / (values.length - 1);
-	    var yMult = totalHeight / maxValue;
-	    p1[0] = (i - 1) * xMult;
-	    p1[1] = c1[1] = values[i - 1] * yMult;
-	    c1[0] = c2[0] = (i - 0.5) * xMult;
-	    c2[1] = p2[1] = values[i] * yMult;
-	    p2[0] = i * xMult;
-	    var segmentPoints = adaptiveBezierCurve(p1, c1, c2, p2);
-	    for (var j = i === 1 ? 0 : 1; j < segmentPoints.length; j++) {
-	      curveValues.push(segmentPoints[j]);
-	    }
-	  }
-	  return curveValues;
-	}
-
-	// Given an array of y values, construct a step path connecting those points.
-	function valuesToSquarePoints(values, totalWidth, totalHeight) {
-	  var maxValue = Math.max.apply(Math, values);
-	  var curveValues = [];
-	  for (var i = 0; i < values.length; i++) {
-	    var xMult = totalWidth / (values.length - 1);
-	    var yMult = totalHeight / maxValue;
-	    if (i > 0) {
-	      curveValues.push([i * xMult, values[i - 1] * yMult]);
-	    }
-	    curveValues.push([i * xMult, values[i] * yMult]);
-	  }
-	  return curveValues;
-	}
-
-	// Facade for the curve.
-	var LineGraph = /*@__PURE__*/(function (Object3DFacade) {
-	  function LineGraph(parent) {
-	    Object3DFacade.call(this, parent, new Group());
-
-	    // Use a single Line2D buffer geometry for both stroke and fill meshes
-	    var geometry = new PatchedLine2DGeometry();
-
-	    // Stroke mesh with custom shader material
-	    this.strokeMesh = new Mesh(
-	      geometry,
-	      new ShaderMaterial({
-	        uniforms: {
-	          thickness: { value: 1 },
-	          color: { value: new Color() },
-	          opacity: { value: 1 }
-	        },
-	        transparent: true,
-	        vertexShader: strokeVertexShader,
-	        fragmentShader: strokeFragmentShader,
-	        //depthTest: false,
-	        side: DoubleSide
-	      })
-	    );
-
-	    // Fill mesh with custom shader material
-	    this.fillMesh = new Mesh(
-	      geometry,
-	      new ShaderMaterial({
-	        uniforms: {
-	          color: { value: new Color() },
-	          opacity: { value: 1 },
-	          gradientScale: { value: 1 },
-	          gradientPercent: { value: 1 },
-	          gradientExp: { value: 1 },
-	          maxY: { value: 1 }
-	        },
-	        transparent: true,
-	        vertexShader: fillVertexShader,
-	        fragmentShader: fillFragmentShader,
-	        //depthTest: false,
-	        side: DoubleSide
-	      })
-	    );
-	    this.strokeMesh.frustumCulled = this.fillMesh.frustumCulled = false;
-
-	    // Add both meshes to the Group
-	    this.threeObject.add(this.strokeMesh, this.fillMesh);
-	  }
-
-	  if ( Object3DFacade ) LineGraph.__proto__ = Object3DFacade;
-	  LineGraph.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
-	  LineGraph.prototype.constructor = LineGraph;
-
-	  LineGraph.prototype.afterUpdate = function afterUpdate () {
-	    // Update the shared geometry
-	    var geometry = this.strokeMesh.geometry;
-	    geometry.update(
-	      this.pathShape === "step"
-	        ? valuesToSquarePoints(this.values, this.width, this.height)
-	        : valuesToCurvePoints(this.values, this.width, this.height)
-	    );
-
-	    // Update the stroke mesh
-	    var hasStroke =
-	      this.strokeWidth && this.strokeColor && this.strokeOpacity > 0;
-	    if (hasStroke) {
-	      var strokeUniforms = this.strokeMesh.material.uniforms;
-	      strokeUniforms.color.value.set(this.strokeColor);
-	      strokeUniforms.opacity.value = this.strokeOpacity;
-	      strokeUniforms.thickness.value = this.strokeWidth;
-	    }
-	    this.strokeMesh.visible = !!hasStroke;
-
-	    // Update the fill mesh
-	    var hasFill = this.fillColor && this.fillOpacity > 0;
-	    if (hasFill) {
-	      var fillUniforms = this.fillMesh.material.uniforms;
-	      fillUniforms.color.value.set(this.fillColor);
-	      fillUniforms.opacity.value = this.fillOpacity;
-	      fillUniforms.gradientScale.value =
-	        this.fillGradientScale === "max-value" ? 1 : 0;
-	      fillUniforms.maxY.value = this.height;
-	      fillUniforms.gradientPercent.value = this.fillGradientPercent || 0;
-	      fillUniforms.gradientExp.value = this.fillGradientExp || 1;
-	    }
-	    this.fillMesh.visible = !!hasFill;
-
-	    this.fillMesh.renderOrder = this.strokeMesh.renderOrder =
-	      this.renderOrder || 0;
-
-	    Object3DFacade.prototype.afterUpdate.call(this);
-	  };
-
-	  return LineGraph;
-	}(Object3DFacade));
-
-	// defaults
-	Object.assign(LineGraph.prototype, {
-	  width: 500,
-	  height: 100,
-	  strokeWidth: 2,
-	  strokeColor: 0xffffff,
-	  strokeOpacity: 1,
-	  fillColor: 0xffffff,
-	  fillOpacity: 0.5,
-	  fillGradientScale: "per-value", //or 'max-value'
-	  fillGradientPercent: 1,
-	  fillGradientExp: 3,
-	  pathShape: "curve" //or 'step'
 	});
-
-	function interpolateArray(fromValue, toValue, progress) {
-	  var interpolated = new Float32Array(toValue.length);
-	  for (var i = interpolated.length; i--; ) {
-	    var from = i < fromValue.length ? fromValue[i] : 0;
-	    interpolated[i] = from + (toValue[i] - from) * progress;
-	  }
-	  return interpolated
-	}
-
-
-
-	var FlexboxLineGraph = /*@__PURE__*/(function (Group3DFacade) {
-	  function FlexboxLineGraph(parent) {
-	    Group3DFacade.call(this, parent);
-
-	    this.curveChildDef = {
-	      key: 'curve',
-	      facade: LineGraph,
-	      values: [],
-	      transition: {
-	        values: {
-	          duration: 1000,
-	          easing: 'easeInOutCubic',
-	          interpolate: interpolateArray
-	        }
-	      }
-	    };
-	  }
-
-	  if ( Group3DFacade ) FlexboxLineGraph.__proto__ = Group3DFacade;
-	  FlexboxLineGraph.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
-	  FlexboxLineGraph.prototype.constructor = FlexboxLineGraph;
-
-	  FlexboxLineGraph.prototype.afterUpdate = function afterUpdate () {
-	    if (this.offsetWidth) {
-	      var childDef = this.curveChildDef;
-	      childDef.values = this.values;
-	      this.x = this.offsetLeft + this.clientLeft;
-	      this.y = -(this.offsetTop + this.clientTop + this.clientHeight);
-	      childDef.width = this.clientWidth;
-	      childDef.height = this.clientHeight;
-	      childDef.strokeColor = childDef.fillColor = this.color;
-	      childDef.renderOrder = this.flexNodeDepth;
-	      this.children = childDef;
-	    }
-	    Group3DFacade.prototype.afterUpdate.call(this);
-	  };
-
-	  return FlexboxLineGraph;
-	}(Group3DFacade));
-
-	var FlexboxLineGraph$1 = extendAsFlexNode(FlexboxLineGraph);
 
 	/**
 	 * Convenience class for displaying icons using the Material Icons library. See https://material.io/icons/
@@ -61029,330 +62293,14896 @@
 	  Object.defineProperties( MaterialIconFacade.prototype, prototypeAccessors );
 
 	  return MaterialIconFacade;
-	}(Block));
+	}(UIBlock3DFacade$1));
 
-	var INIT_ORIGIN = {
-	  x: 0,
-	  y: 0,
-	  z: 0,
-	  rotateY: 0
+	var DatBooleanFacade = /*@__PURE__*/(function (Icon) {
+	  function DatBooleanFacade(parent) {
+	    var this$1 = this;
+
+	    Icon.call(this, parent);
+	    // Material Icons font URL
+	    this.justifyContent = 'center';
+	    this.fontSize = '150%';
+	    this.onClick = function (e) {
+	      this$1.onUpdate(!this$1.value);
+	    };
+	  }
+
+	  if ( Icon ) DatBooleanFacade.__proto__ = Icon;
+	  DatBooleanFacade.prototype = Object.create( Icon && Icon.prototype );
+	  DatBooleanFacade.prototype.constructor = DatBooleanFacade;
+
+	  DatBooleanFacade.prototype.afterUpdate = function afterUpdate () {
+	    this.icon = this.value ? 'check_box' : 'check_box_outline_blank';
+	    Icon.prototype.afterUpdate.call(this);
+	  };
+
+	  return DatBooleanFacade;
+	}(MaterialIconFacade));
+
+	var DatButtonFacade = /*@__PURE__*/(function (UIBlock3DFacade) {
+	  function DatButtonFacade(parent) {
+	    UIBlock3DFacade.call(this, parent);
+	    this.children = {
+	      facade: UIBlock3DFacade,
+	      borderRadius: '10%',
+	      backgroundColor: 0x333399,
+	      height: '100%',
+	      padding: [0, 0.02],
+	      alignItems: 'center',
+	      justifyContent: 'center',
+	      pointerStates: {
+	        hover: {
+	          backgroundColor: 0x6666cc
+	        }
+	      }
+	    };
+	  }
+
+	  if ( UIBlock3DFacade ) DatButtonFacade.__proto__ = UIBlock3DFacade;
+	  DatButtonFacade.prototype = Object.create( UIBlock3DFacade && UIBlock3DFacade.prototype );
+	  DatButtonFacade.prototype.constructor = DatButtonFacade;
+
+	  DatButtonFacade.prototype.afterUpdate = function afterUpdate () {
+	    this.children.text = this.label || 'Missing label';
+	    UIBlock3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return DatButtonFacade;
+	}(UIBlock3DFacade$1));
+
+	var tempColor$1 = new Color();
+	var tempPlane$2 = new Plane();
+
+	var hsv2rgb_glsl = "\n// From https://github.com/hughsk/glsl-hsv2rgb\nvec3 hsv2rgb(vec3 c) {\n  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n}\n";
+
+	// From https://gist.github.com/xpansive/1241234
+	function hsv2rgb (a, b, c, d, e, f) {
+	  d = a * 6 % 1;
+	  f = [c, -c * d * b + c, e = -c * b + c, e, c * d * b + e, c];
+	  return [f[d = a * 6 | 0], f[(4 + d) % 6], f[(2 + d) % 6]]
+	}
+
+	// Adapted from https://github.com/Qix-/color-convert
+	function rgb2hsv (r, g, b) {
+	  var rdif;
+	  var gdif;
+	  var bdif;
+	  var h;
+	  var s;
+
+	  var v = Math.max(r, g, b);
+	  var diff = v - Math.min(r, g, b);
+	  var diffc = function (c) {
+	    return (v - c) / 6 / diff + 1 / 2
+	  };
+
+	  if (diff === 0) {
+	    h = 0;
+	    s = 0;
+	  } else {
+	    s = diff / v;
+	    rdif = diffc(r);
+	    gdif = diffc(g);
+	    bdif = diffc(b);
+
+	    if (r === v) {
+	      h = bdif - gdif;
+	    } else if (g === v) {
+	      h = (1 / 3) + rdif - bdif;
+	    } else if (b === v) {
+	      h = (2 / 3) + gdif - rdif;
+	    }
+
+	    if (h < 0) {
+	      h += 1;
+	    } else if (h > 1) {
+	      h -= 1;
+	    }
+	  }
+
+	  return [h, s, v]
+	}
+
+	var cylinderGeometry = new CylinderGeometry(0.5, 0.5, 1, 45)
+	  .translate(0, 0.5, 0)
+	  .rotateX(Math.PI / 2)
+	  .rotateZ(Math.PI / 2); //orient uv
+
+	var cylinderMaterial = createDerivedMaterial(new MeshBasicMaterial({side: 2}), {
+	  uniforms: {
+	    maxValue: {value: 1}
+	  },
+
+	  vertexDefs: "\nvarying vec3 vPos;\n",
+
+	  vertexMainIntro: "\nvPos = position;\n",
+
+	  fragmentDefs: ("\nuniform float maxValue;\nvarying vec3 vPos;\n" + hsv2rgb_glsl + "\n"),
+
+	  fragmentColorTransform: "\nfloat angle = atan(vPos.y, vPos.x) / PI2;\nfloat radius = length(vPos.xy) * 2.0;\nfloat value = vPos.z * maxValue;\nvec3 hsv = vec3(angle, radius, value);\nvec3 rgb = hsv2rgb(hsv);\ngl_FragColor.xyz = rgb;\n"
+	});
+
+	/**
+	 * Cylinder representing `hue` + `saturation` on its top disc surface and `value`
+	 * with its height.
+	 */
+	var HsvCylinder = /*@__PURE__*/(function (Object3DFacade) {
+	  function HsvCylinder (parent) {
+	    Object3DFacade.call(this, parent, new Mesh(
+	      cylinderGeometry,
+	      cylinderMaterial.clone()
+	    ));
+	    this.maxValue = 1;
+	  }
+
+	  if ( Object3DFacade ) HsvCylinder.__proto__ = Object3DFacade;
+	  HsvCylinder.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  HsvCylinder.prototype.constructor = HsvCylinder;
+
+	  HsvCylinder.prototype.afterUpdate = function afterUpdate () {
+	    this.threeObject.material.uniforms.maxValue.value = this.maxValue;
+	    Object3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return HsvCylinder;
+	}(Object3DFacade));
+
+	/**
+	 * Backside-only full height cylinder serving to hold visual shape of full cylinder
+	 * height when the main cylinder is shorter:
+	 */
+	var HsvCylinderBg = /*@__PURE__*/(function (Object3DFacade) {
+	  function HsvCylinderBg (parent) {
+	    var material = cylinderMaterial.clone();
+	    material.transparent = true;
+	    material.opacity = 0.5;
+	    material.side = BackSide;
+
+	    Object3DFacade.call(this, parent, new Mesh(
+	      cylinderGeometry,
+	      material
+	    ));
+	  }
+
+	  if ( Object3DFacade ) HsvCylinderBg.__proto__ = Object3DFacade;
+	  HsvCylinderBg.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  HsvCylinderBg.prototype.constructor = HsvCylinderBg;
+
+	  return HsvCylinderBg;
+	}(Object3DFacade));
+
+	var ValueStick = /*@__PURE__*/(function (Object3DFacade) {
+	  function ValueStick (parent) {
+	    var ballGeom = new SphereGeometry(0.05, 16, 12)
+	      .translate(0, 0, 0.5);
+	    var stickGeom = new CylinderGeometry(0.005, 0.005, 0.5, 6)
+	      .translate(0, 0.25, 0).rotateX(Math.PI / 2);
+
+	    var material = new MeshBasicMaterial();
+
+	    var mesh = new Mesh(ballGeom, material);
+	    mesh.add(new Mesh(stickGeom, new MeshBasicMaterial({color: 0xcccccc})));
+	    Object3DFacade.call(this, parent, mesh);
+	  }
+
+	  if ( Object3DFacade ) ValueStick.__proto__ = Object3DFacade;
+	  ValueStick.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  ValueStick.prototype.constructor = ValueStick;
+
+	  ValueStick.prototype.afterUpdate = function afterUpdate () {
+	    this.threeObject.material.color.set(this.color);
+	    Object3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return ValueStick;
+	}(Object3DFacade));
+
+	var ValuePlane = /*@__PURE__*/(function (Object3DFacade) {
+	  function ValuePlane (parent) {
+	    var material = createDerivedMaterial(new MeshBasicMaterial({
+	      transparent: true,
+	      color: 0xffffff,
+	      polygonOffset: true,
+	      polygonOffsetFactor: 1
+	    }), {
+	      vertexDefs: 'varying vec2 vUV;',
+	      vertexMainIntro: 'vUV = uv;',
+	      fragmentDefs: 'varying vec2 vUV;',
+	      fragmentColorTransform: "\n        float dist = min(min(vUV.x, 1.0 - vUV.x), min(vUV.y, 1.0 - vUV.y));\n        gl_FragColor.w *= 1.0 - 0.5 * smoothstep(0.0, 0.1, dist);\n      "
+	    });
+	    Object3DFacade.call(this, parent, new Mesh(
+	      new PlaneGeometry(),
+	      material
+	    ));
+	  }
+
+	  if ( Object3DFacade ) ValuePlane.__proto__ = Object3DFacade;
+	  ValuePlane.prototype = Object.create( Object3DFacade && Object3DFacade.prototype );
+	  ValuePlane.prototype.constructor = ValuePlane;
+
+	  ValuePlane.prototype.afterUpdate = function afterUpdate () {
+	    this.threeObject.material.opacity = this.opacity;
+	    Object3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return ValuePlane;
+	}(Object3DFacade));
+
+	var ColorPickerFacade = /*@__PURE__*/(function (Group3DFacade) {
+	  function ColorPickerFacade (parent) {
+	    var this$1 = this;
+
+	    Group3DFacade.call(this, parent);
+
+	    this.cylinderHeight = 0.5;
+	    this.cylinderDiameter = 0.75;
+
+	    // Tilt down so user can see both relevant dimensions
+	    // TODO can/should we automatically update this to match camera position?
+	    this.rotateX = -Math.PI / 4;
+
+	    // Handle click/drag on surface of cylinder:
+	    var onHueSaturationDrag = function (e) {
+	      var obj = e.currentTarget.threeObject;
+	      var ray = e.ray;
+	      tempPlane$2.normal.set(0, 0, -1);
+	      tempPlane$2.constant = 1; //top of cylinder
+	      tempPlane$2.applyMatrix4(obj.matrixWorld);
+	      var intersection = ray.intersectPlane(tempPlane$2, new Vector3());
+	      if (intersection) {
+	        obj.worldToLocal(intersection);
+	        var x = intersection.x * 2;
+	        var y = (intersection.y) * 2;
+	        var angle = Math.atan2(y, x) / Math.PI / 2; //0-1
+	        while (angle < 0) { angle += 1; }
+	        var radius = Math.min(1, Math.sqrt(x * x + y * y));
+
+	        var hsv = this$1._getHSV();
+	        hsv[0] = angle;
+	        hsv[1] = radius;
+	        this$1._updateHSV(hsv, e.shiftKey);
+	      }
+	    };
+
+	    // Move hsv value up and down with scroll wheel:
+	    this.onWheel = function (e) {
+	      var hsv = this$1._getHSV();
+	      hsv[2] = Math.max(0, Math.min(1, hsv[2] + e.nativeEvent.deltaY / 100));
+	      this$1._updateHSV(hsv, false);
+	    };
+
+	    this.children = [
+	      this.cylinderDef = {
+	        key: 'disc',
+	        facade: HsvCylinder,
+	        onMouseDown: onHueSaturationDrag,
+	        onDragStart: onHueSaturationDrag,
+	        onDrag: onHueSaturationDrag
+	      },
+	      this.cylinderBgDef = {
+	        facade: HsvCylinderBg,
+	        renderOrder: 9
+	      },
+	      this.planeDef = {
+	        facade: ValuePlane,
+	        renderOrder: 10,
+	        opacity: 0.3,
+	        pointerStates: {
+	          hover: {opacity: 0.4}
+	        },
+	        transition: {opacity: true},
+	        onDragStart: function (e) {
+	          this$1._dragData = {
+	            plane: new Plane().setFromNormalAndCoplanarPoint(
+	              new Vector3(0, 1, 0).transformDirection(this$1.threeObject.matrixWorld),
+	              e.intersection.point
+	            )
+	          };
+	        },
+	        onDrag: function (e) {
+	          var ref = this$1._dragData;
+	          var plane = ref.plane;
+	          var coplanarPoint = e.ray.intersectPlane(plane, new Vector3());
+	          this$1.threeObject.worldToLocal(coplanarPoint);
+	          var hsv = this$1._getHSV();
+	          hsv[2] = Math.max(0, Math.min(1,
+	            coplanarPoint.z / this$1.cylinderHeight
+	          ));
+	          this$1._updateHSV(hsv, e.shiftKey);
+	        },
+	        onDragEnd: function (e) {
+	          this$1._dragData = null;
+	        }
+	      },
+	      this.stickDef = {
+	        facade: ValueStick
+	      }
+	    ];
+	  }
+
+	  if ( Group3DFacade ) ColorPickerFacade.__proto__ = Group3DFacade;
+	  ColorPickerFacade.prototype = Object.create( Group3DFacade && Group3DFacade.prototype );
+	  ColorPickerFacade.prototype.constructor = ColorPickerFacade;
+
+	  ColorPickerFacade.prototype._getHSV = function _getHSV () {
+	    var hsv = [0, 0, 0];
+	    if (this.value != null) {
+	      tempColor$1.set(this.value);
+	      hsv = rgb2hsv(tempColor$1.r, tempColor$1.g, tempColor$1.b);
+	    }
+	    return hsv
+	  };
+
+	  ColorPickerFacade.prototype._updateHSV = function _updateHSV (hsv, websafe) {
+	    var rgb = hsv2rgb.apply(void 0, hsv);
+	    tempColor$1.setRGB.apply(tempColor$1, rgb);
+	    if (websafe) {
+	      tempColor$1.r = Math.round(tempColor$1.r * 5) / 5;
+	      tempColor$1.g = Math.round(tempColor$1.g * 5) / 5;
+	      tempColor$1.b = Math.round(tempColor$1.b * 5) / 5;
+	    }
+	    this.onChange(tempColor$1.getHex());
+	  };
+
+	  ColorPickerFacade.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var stickDef = ref.stickDef;
+	    var cylinderDef = ref.cylinderDef;
+	    var cylinderBgDef = ref.cylinderBgDef;
+	    var planeDef = ref.planeDef;
+	    var cylinderHeight = ref.cylinderHeight;
+	    var cylinderDiameter = ref.cylinderDiameter;
+	    var hsv = this._getHSV();
+
+	    // find x/y on disc for hue + saturation:
+	    var angle = hsv[0] * Math.PI * 2;
+	    var radius = hsv[1] / 2 * cylinderDiameter;
+	    var x = Math.cos(angle) * radius;
+	    var y = Math.sin(angle) * radius;
+
+	    stickDef.x = x;
+	    stickDef.y = y;
+	    stickDef.z = hsv[2] * cylinderHeight;
+	    stickDef.color = this.value;
+
+	    cylinderDef.maxValue = hsv[2];
+	    cylinderDef.scale = cylinderDiameter;
+	    cylinderDef.scaleZ = hsv[2] * cylinderHeight + 0.00001; //never zero scale
+	    cylinderBgDef.scale = cylinderDiameter;
+	    cylinderBgDef.scaleZ = cylinderHeight;
+
+	    planeDef.z = hsv[2] * cylinderHeight;
+
+	    Group3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return ColorPickerFacade;
+	}(Group3DFacade));
+
+	var sceneCloserEvents = ['mousedown', 'wheel'];
+
+
+	var PopupOwner = /*@__PURE__*/(function (UIBlock3DFacade) {
+	  function PopupOwner(parent) {
+	    var this$1 = this;
+
+	    UIBlock3DFacade.call(this, parent);
+
+	    this.popupContent = null;
+	    this._popupCt = {key: 'popup', facade: ParentFacade};
+
+	    this._onCloserEvent = function (e) {
+	      if (!isEventInFacade(e, this$1)) {
+	        this$1.closePopup();
+	      }
+	    };
+
+	    this.openPopup = function () {
+	      if (!this$1.isPopupOpen) {
+	        this$1.isPopupOpen = true;
+	        this$1.afterUpdate();
+	      }
+	    };
+
+	    this.closePopup = function () {
+	      if (this$1.isPopupOpen) {
+	        this$1.isPopupOpen = false;
+	        this$1.afterUpdate();
+	      }
+	    };
+
+	  }
+
+	  if ( UIBlock3DFacade ) PopupOwner.__proto__ = UIBlock3DFacade;
+	  PopupOwner.prototype = Object.create( UIBlock3DFacade && UIBlock3DFacade.prototype );
+	  PopupOwner.prototype.constructor = PopupOwner;
+
+	  var prototypeAccessors = { children: { configurable: true } };
+
+	  PopupOwner.prototype.getPopupContent = function getPopupContent () {
+	    return this.popupContent
+	  };
+
+	  prototypeAccessors.children.set = function (children) {
+	    this._children = [this._popupCt].concat(children);
+	  };
+	  prototypeAccessors.children.get = function () {
+	    return this._children
+	  };
+
+	  PopupOwner.prototype._toggleCloseListeners = function _toggleCloseListeners (on) {
+	    var this$1 = this;
+
+	    var scene = this.getSceneFacade();
+	    if (scene) {
+	      sceneCloserEvents.forEach(function (type) {
+	        scene[(on ? 'add' : 'remove') + 'EventListener'](type, this$1._onCloserEvent);
+	      });
+	    }
+	  };
+
+	  PopupOwner.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var isPopupOpen = ref.isPopupOpen;
+	    if (isPopupOpen !== this._wasPopupOpen) {
+	      this._wasPopupOpen = isPopupOpen;
+	      this._toggleCloseListeners(isPopupOpen);
+	    }
+	    this._popupCt.children = isPopupOpen ? this.getPopupContent() : null;
+	    UIBlock3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  PopupOwner.prototype.destructor = function destructor () {
+	    this._toggleCloseListeners(false);
+	    UIBlock3DFacade.prototype.destructor.call(this);
+	  };
+
+	  Object.defineProperties( PopupOwner.prototype, prototypeAccessors );
+
+	  return PopupOwner;
+	}(UIBlock3DFacade$1));
+
+	function isEventInFacade(e, facade) {
+	  var tgt = e.target;
+	  while (tgt) {
+	    if (tgt === facade) { return true }
+	    tgt = tgt.parent;
+	  }
+	  return false
+	}
+
+	var tempColor$2 = new Color();
+
+	var DatButtonFacade$1 = /*@__PURE__*/(function (PopupOwner) {
+	  function DatButtonFacade (parent) {
+	    PopupOwner.call(this, parent);
+	    this.flexDirection = 'row';
+	    this.alignItems = 'center';
+
+	    this.children = [
+	      this.swatchDef = {
+	        facade: UIBlock3DFacade$1,
+	        borderRadius: '10%',
+	        backgroundColor: null,
+	        height: '100%',
+	        width: '25%',
+	        onClick: this.openPopup
+	      },
+	      this.labelDef = {
+	        facade: UIBlock3DFacade$1,
+	        padding: 0.01
+	      }
+	    ];
+
+	    this.popupContent = this.pickerDef = {
+	      key: 'picker',
+	      facade: ColorPickerFacade,
+	      visible: false,
+	      onChange: this._onColorChange.bind(this),
+	      animation: {
+	        from: {scale: 1e-10},
+	        to: {scale: 1}, //overwritten in afterUpdate
+	        duration: 500,
+	        easing: 'easeOutExpo'
+	      }
+	    };
+	  }
+
+	  if ( PopupOwner ) DatButtonFacade.__proto__ = PopupOwner;
+	  DatButtonFacade.prototype = Object.create( PopupOwner && PopupOwner.prototype );
+	  DatButtonFacade.prototype.constructor = DatButtonFacade;
+
+	  DatButtonFacade.prototype._onColorChange = function _onColorChange (newVal) {
+	    this.onUpdate(newVal);
+	  };
+
+	  DatButtonFacade.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var swatchDef = ref.swatchDef;
+	    var labelDef = ref.labelDef;
+	    var pickerDef = ref.pickerDef;
+	    var value = ref.value;
+	    var offsetWidth = ref.offsetWidth;
+	    var offsetHeight = ref.offsetHeight;
+
+	    var hasColor = value != null;
+	    if (hasColor) {
+	      tempColor$2.set(value);
+	    }
+
+	    swatchDef.backgroundColor = hasColor ? tempColor$2.getHex() : null;
+	    labelDef.text = hasColor ? '#' + tempColor$2.getHexString().toUpperCase() : '(choose color)';
+
+	    if (offsetWidth && offsetHeight) {
+	      pickerDef.visible = true;
+	      pickerDef.value = tempColor$2.getHex();
+	      var scale = offsetHeight * 7; //base scale on height
+	      pickerDef.scale = pickerDef.animation.to.scale = scale;
+	      pickerDef.x = offsetWidth + scale * .75;
+	      pickerDef.y = -scale / 2 - offsetHeight;
+	      //pickerDef.z = scale / 2
+	    }
+
+	    PopupOwner.prototype.afterUpdate.call(this);
+	  };
+
+	  return DatButtonFacade;
+	}(PopupOwner));
+
+	var SliderFacade = /*@__PURE__*/(function (UIBlock3DFacade) {
+	  function SliderFacade (parent) {
+	    var this$1 = this;
+
+	    UIBlock3DFacade.call(this, parent);
+
+	    // this.value = 0
+	    // this.min = 0
+	    // this.max = 1
+	    // this.step = 0.1
+
+	    this.flexDirection = 'row';
+	    this.minHeight = 0.01;
+	    this.backgroundColor = 0x666666;
+	    this.children = this._valChild = {
+	      key: 'slider',
+	      facade: UIBlock3DFacade,
+	      backgroundColor: 0xffffff,
+	      width: '0%'
+	    };
+
+	    this.onMouseDown = this.onDragStart = this.onDrag = function (e) {
+	      var min = this$1.min || 0;
+	      var max = this$1.max || 0;
+	      if (max !== min && e.intersection && e.intersection.facade === this$1) {
+	        var val = min + e.intersection.uv.x * (max - min);
+	        var step = this$1.step || 0.001; //TODO choose a step based on min/max?
+	        val = Math.round(val / step) * step;
+	        val = +val.toFixed((step + '').replace(/^-?\d+\.?/, '').length); //trim precision errors
+	        this$1.onChange(val);
+	        e.stopPropagation();
+	      }
+	    };
+	  }
+
+	  if ( UIBlock3DFacade ) SliderFacade.__proto__ = UIBlock3DFacade;
+	  SliderFacade.prototype = Object.create( UIBlock3DFacade && UIBlock3DFacade.prototype );
+	  SliderFacade.prototype.constructor = SliderFacade;
+
+	  SliderFacade.prototype.afterUpdate = function afterUpdate () {
+	    var valChild = this._valChild;
+	    //valChild.backgroundColor = this.color == null ? 0xffffff : this.color
+
+	    var val = this.value || 0;
+	    var min = Math.min(this.min || 0, val);
+	    var max = Math.max(this.max || 0, val);
+	    valChild.width = min === max ? 0 : (((val - min) / (max - min) * 100) + "%");
+
+	    UIBlock3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return SliderFacade;
+	}(UIBlock3DFacade$1));
+
+	var DatNumberFacade = /*@__PURE__*/(function (UIBlock3DFacade) {
+	  function DatNumberFacade(parent) {
+	    UIBlock3DFacade.call(this, parent);
+
+	    this.value = 0;
+	    this.min = 0;
+	    this.max = 1;
+	    this.step = 0.1;
+
+	    this.flexDirection = 'row';
+	    this.alignItems = 'center';
+	    this.children = [
+	      this._sliderChild = {
+	        key: 'slider',
+	        facade: SliderFacade,
+	        flex: 1,
+	        minWidth: 0.2,
+	        height: '100%',
+	        margin: [0, 0.01, 0, 0]
+	        // value/min/max/step set in afterUpdate
+	      },
+	      this._textChild = {
+	        key: 'text',
+	        facade: UIBlock3DFacade,
+	        width: 0.05,
+	        text: '0' //set in afterUpdate
+	      }
+	    ];
+	  }
+
+	  if ( UIBlock3DFacade ) DatNumberFacade.__proto__ = UIBlock3DFacade;
+	  DatNumberFacade.prototype = Object.create( UIBlock3DFacade && UIBlock3DFacade.prototype );
+	  DatNumberFacade.prototype.constructor = DatNumberFacade;
+
+	  DatNumberFacade.prototype.afterUpdate = function afterUpdate () {
+	    this._textChild.text = this.value + '';
+
+	    var slider = this._sliderChild;
+	    slider.value = this.value || 0;
+	    slider.min = this.min || 0;
+	    slider.max = this.max || 0;
+	    slider.step = this.step;
+	    slider.onChange = this.onUpdate;
+
+	    UIBlock3DFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return DatNumberFacade;
+	}(UIBlock3DFacade$1));
+
+	var DatSelectFacade = /*@__PURE__*/(function (PopupOwner) {
+	  function DatSelectFacade(parent) {
+	    var this$1 = this;
+
+	    PopupOwner.call(this, parent);
+	    this.position = 'relative';
+	    this.dropdownConfig = null;
+
+	    this._onItemClick = function (e) {
+	      this$1.onUpdate(e.target.value);
+	      this$1.closePopup();
+	    };
+
+	    this.children = [
+	      this._btnChild = {
+	        key: 'btn',
+	        facade: UIBlock3DFacade$1,
+	        flexDirection: 'row',
+	        alignItems: 'center',
+	        justifyContent: 'space-between',
+	        borderRadius: '10%',
+	        backgroundColor: 0x333399,
+	        height: '100%',
+	        padding: [0, 0.02],
+	        overflow: 'hidden',
+	        pointerStates: {
+	          hover: {
+	            backgroundColor: 0x6666cc
+	          }
+	        },
+	        onClick: this.openPopup,
+	        children: [
+	          '', //label
+	          {
+	            facade: MaterialIconFacade,
+	            icon: 'keyboard_arrow_down'
+	          }
+	        ]
+	      }
+	    ];
+
+	    // Content definition for menu when open
+	    this.popupContent = {
+	      key: 'menu',
+	      facade: UIBlock3DFacade$1,
+	      position: 'absolute',
+	      top: '100%',
+	      left: 0,
+	      width: '100%',
+	      backgroundColor: 0x333333,
+	      z: 0.01,
+	      //rotateX: Math.PI / -90,
+	      maxHeight: 0.5,
+	      overflow: 'scroll',
+	      flexDirection: 'column',
+	      children: this._menuListDef = {
+	        facade: List,
+	        data: null, //populated by `options` property
+	        template: {
+	          key: function (d, i) { return i; },
+	          facade: UIBlock3DFacade$1,
+	          width: '100%',
+	          overflow: 'hidden',
+	          whiteSpace: 'nowrap',
+	          padding: 0.01,
+	          text: function (d) { return d.label; },
+	          value: function (d) { return d.value; },
+	          onClick: function (d) { return this$1._onItemClick; },
+	          backgroundColor: function (d) { return d.selected ? 0x666666 : null; },
+	          pointerStates: {
+	            hover: {
+	              backgroundColor: 0x444444
+	            }
+	          }
+	        }
+	      },
+	      animation: {
+	        from: {scale: 0.01},
+	        to: {scale: 1},
+	        duration: 300,
+	        easing: 'easeOutExpo'
+	      },
+	      // exitAnimation: {
+	      //   from: {scale: 1},
+	      //   to: {scale: 0.01},
+	      //   duration: 200
+	      // }
+	    };
+	  }
+
+	  if ( PopupOwner ) DatSelectFacade.__proto__ = PopupOwner;
+	  DatSelectFacade.prototype = Object.create( PopupOwner && PopupOwner.prototype );
+	  DatSelectFacade.prototype.constructor = DatSelectFacade;
+
+	  DatSelectFacade.prototype.afterUpdate = function afterUpdate () {
+	    var this$1 = this;
+
+	    var currentOption = null;
+	    var options = this.options.reduce(function (out, d) {
+	      if (d) {
+	        var opt = {};
+	        if (d && typeof d === 'object') {
+	          opt.value = d.value;
+	          opt.label = typeof d.label === 'string' ? d.label : ("" + (d.value));
+	        }
+	        else {
+	          opt.value = d;
+	          opt.label = d + '';
+	        }
+	        if (opt.value === this$1.value) {
+	          opt.selected = true;
+	          currentOption = opt;
+	        }
+	        out.push(opt);
+	      }
+	      return out
+	    }, []);
+
+	    this._btnChild.children[0] = currentOption ? currentOption.label : '[Select...]';
+	    Object.assign(this.popupContent, this.dropdownConfig);
+	    this._menuListDef.data = options;
+
+	    PopupOwner.prototype.afterUpdate.call(this);
+	  };
+
+	  return DatSelectFacade;
+	}(PopupOwner));
+
+	// import DatStringFacade from './DatStringFacade'
+
+	var TYPE_FACADES = {
+	  boolean: DatBooleanFacade,
+	  button: DatButtonFacade,
+	  color: DatButtonFacade$1,
+	  // folder: DatFolderFacade,
+	  number: DatNumberFacade,
+	  // presets: DatPresetsFacade,
+	  select: DatSelectFacade,
+	  // string: DatStringFacade
 	};
 
-	var TABS = [
-	  {
-	    key: 'colors',
-	    title: 'Colors',
-	    desc: 'Select a color from the cubes to show its value.'
-	  },
-	  {
-	    key: 'globe',
-	    title: 'Globes',
-	    desc: paleBlueDot
-	  },
-	  {
-	    key: 'graph',
-	    title: 'Graphs',
-	    desc: 'Line graphs stacked in the depth dimension'
+	/**
+	 * @typedef {object} DatGuiItemDefinition
+	 * @property {('boolean'|'button'|'color'|'number'|'select')} type - The datatype of this value item.
+	 * @property {string} path - A string defining where in the `data` object this item's value lives.
+	 * @property {string} [label] - A label for the item. Defaults to the `path`.
+	 * @property {number} [height] - A custom height for this item
+	 * @property {function} [onUpdate] - A function that will be called when the item's value changes, in
+	 *           addition to the main `DatGuiFacade`'s onUpdate function.
+	 * Additional properties can also be added and will be passed down to their implementation facade.
+	 */
+
+	/**
+	 * THIS IS A WORK-IN-PROGRESS.
+	 *
+	 * `DatGuiFacade` creates a UI panel for tweaking a set of values, along the lines of
+	 * the well-known [dat.GUI](https://workshop.chromeexperiments.com/examples/gui) or
+	 * [react-dat-gui]([react-dat-gui](https://github.com/claus/react-dat-gui), for use within
+	 * WebGL environments. This is particularly useful in WebXR, where overlaid HTML cannot be
+	 * used. It is interactable via both screen mouse/touch input and WebXR pointer inputs.
+	 *
+	 * @member {DatGuiItemDefinition[]} items - Defines the list of values to be presented.
+	 * @member {object} data - An object containing the current values for each of the `items`.
+	 * @member {function(object)} onUpdate - A function that gets called when the user changes any
+	 *         values. It is passed the modified `data` object.
+	 * @member {number} [itemHeight] - Default height for the items.
+	 *
+	 * This extends {@link UIBlock3DFacade} so any of its supported properties can also be set.
+	 */
+	var DatGuiFacade = /*@__PURE__*/(function (UIBlock3DFacade) {
+	  function DatGuiFacade(parent) {
+	    UIBlock3DFacade.call(this, parent);
+
+	    this.flexDirection = 'row';
+	    this.fontSize = 0.02;
+	    this.itemHeight = 0.04;
+	    this.padding = [0, 0.02];
+	    this.backgroundColor = 0x444444;
+	    this.borderRadius = 0.01;
+	    this.alignItems = 'flex-start';
+
+	    this.data = {};
 	  }
-	];
 
-	var GLOBE_TEXTURES = [
-	  {
-	    title: 'Day',
-	    url: 'globe/texture_day.jpg'
-	  },
-	  {
-	    title: 'Night',
-	    url: 'globe/texture_night.jpg'
-	  },
-	  {
-	    title: 'Blue Marble',
-	    url: 'globe/texture_bluemarble.jpg'
-	  },
-	  {
-	    title: 'Pumpkin',
-	    url: 'globe/texture_pumpkin.jpg'
+	  if ( UIBlock3DFacade ) DatGuiFacade.__proto__ = UIBlock3DFacade;
+	  DatGuiFacade.prototype = Object.create( UIBlock3DFacade && UIBlock3DFacade.prototype );
+	  DatGuiFacade.prototype.constructor = DatGuiFacade;
+
+	  DatGuiFacade.prototype._onItemUpdate = function _onItemUpdate (item, value) {
+	    objectPath.set(this.data, item.path, value);
+	    this.onUpdate(this.data);
+	  };
+
+	  DatGuiFacade.prototype.describeChildren = function describeChildren () {
+	    var this$1 = this;
+
+	    return [
+	      // Labels
+	      {
+	        facade: UIBlock3DFacade,
+	        flexDirection: 'column',
+	        margin: [0, 0.03, 0, 0],
+	        children: (this.items || []).map(function (item, i) {
+	          return item ? {
+	            facade: UIBlock3DFacade,
+	            text: item.type === 'button' ? null : item.label || item.path,
+	            height: item.height || this$1.itemHeight,
+	            margin: [i ? 0 : 0.02, 0, 0.02],
+	            flexDirection: 'row',
+	            alignItems: 'center'
+	          } : null
+	        })
+	      },
+	      // Values
+	      {
+	        facade: UIBlock3DFacade,
+	        flexDirection: 'column',
+	        minWidth: 0.2,
+	        children: (this.items || []).map(function (item, i) {
+	          if (!item) { return null }
+	          var facade = item && TYPE_FACADES[item.type];
+	          return facade ?
+	            assign({
+	              key: item.path || i,
+	              facade: facade,
+	              height: item.height || this$1.itemHeight,
+	              margin: [i ? 0 : 0.02, 0, 0.02],
+	              value: objectPath.get(this$1.data, item.path)
+	            }, item, {
+	              onUpdate: function (value) {
+	                if (item.onUpdate) {
+	                  item.onUpdate.call(item, value);
+	                }
+	                this$1._onItemUpdate(item, value);
+	              }
+	            }) :
+	            {
+	              facade: UIBlock3DFacade,
+	              text: ("Unknown Type: " + (item.type))
+	            }
+	        })
+	      }
+	    ]
+	  };
+
+	  return DatGuiFacade;
+	}(UIBlock3DFacade$1));
+
+	function _classCallCheck(instance, Constructor) {
+	  if (!(instance instanceof Constructor)) {
+	    throw new TypeError("Cannot call a class as a function");
 	  }
-	];
+	}
 
+	var classCallCheck = _classCallCheck;
 
-
-	var GRAPH_COLORS = [0x996600, 0x009966, 0x006699, 0x669900, 0x660099];
-	var GRAPH_POINTS = 36;
-
-	var globeAnim = [
-	  {
-	    from: {scale: 0.001},
-	    to: {scale: 1},
-	    easing: 'easeOutExpo'
-	  },
-	  {
-	    from: {rotateY: 0},
-	    to: {rotateY: Math.PI * 2},
-	    duration: 20000,
-	    iterations: Infinity
+	function _defineProperties(target, props) {
+	  for (var i = 0; i < props.length; i++) {
+	    var descriptor = props[i];
+	    descriptor.enumerable = descriptor.enumerable || false;
+	    descriptor.configurable = true;
+	    if ("value" in descriptor) { descriptor.writable = true; }
+	    Object.defineProperty(target, descriptor.key, descriptor);
 	  }
-	];
+	}
 
-	var mainStageAngle = -Math.PI / 2.2;
+	function _createClass(Constructor, protoProps, staticProps) {
+	  if (protoProps) { _defineProperties(Constructor.prototype, protoProps); }
+	  if (staticProps) { _defineProperties(Constructor, staticProps); }
+	  return Constructor;
+	}
 
-	var backdropMaterial = new MeshStandardMaterial({roughness: 0.6, metalness: 0.8});
+	var createClass = _createClass;
 
-	var texLoader = new TextureLoader();
+	function _assertThisInitialized(self) {
+	  if (self === void 0) {
+	    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+	  }
 
-	function loadTextures() {
-	  GLOBE_TEXTURES.forEach(function (d) {
-	    if (!d.texture) {
-	      d.texture = texLoader.load(d.url);
+	  return self;
+	}
+
+	var assertThisInitialized = _assertThisInitialized;
+
+	var setPrototypeOf = createCommonjsModule(function (module) {
+	function _setPrototypeOf(o, p) {
+	  module.exports = _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) {
+	    o.__proto__ = p;
+	    return o;
+	  };
+
+	  return _setPrototypeOf(o, p);
+	}
+
+	module.exports = _setPrototypeOf;
+	});
+
+	function _inherits(subClass, superClass) {
+	  if (typeof superClass !== "function" && superClass !== null) {
+	    throw new TypeError("Super expression must either be null or a function");
+	  }
+
+	  subClass.prototype = Object.create(superClass && superClass.prototype, {
+	    constructor: {
+	      value: subClass,
+	      writable: true,
+	      configurable: true
 	    }
+	  });
+	  if (superClass) { setPrototypeOf(subClass, superClass); }
+	}
+
+	var inherits = _inherits;
+
+	var _typeof_1 = createCommonjsModule(function (module) {
+	function _typeof(obj) {
+	  "@babel/helpers - typeof";
+
+	  if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
+	    module.exports = _typeof = function _typeof(obj) {
+	      return typeof obj;
+	    };
+	  } else {
+	    module.exports = _typeof = function _typeof(obj) {
+	      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+	    };
+	  }
+
+	  return _typeof(obj);
+	}
+
+	module.exports = _typeof;
+	});
+
+	function _possibleConstructorReturn(self, call) {
+	  if (call && (_typeof_1(call) === "object" || typeof call === "function")) {
+	    return call;
+	  }
+
+	  return assertThisInitialized(self);
+	}
+
+	var possibleConstructorReturn = _possibleConstructorReturn;
+
+	var getPrototypeOf = createCommonjsModule(function (module) {
+	function _getPrototypeOf(o) {
+	  module.exports = _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) {
+	    return o.__proto__ || Object.getPrototypeOf(o);
+	  };
+	  return _getPrototypeOf(o);
+	}
+
+	module.exports = _getPrototypeOf;
+	});
+
+	function _defineProperty(obj, key, value) {
+	  if (key in obj) {
+	    Object.defineProperty(obj, key, {
+	      value: value,
+	      enumerable: true,
+	      configurable: true,
+	      writable: true
+	    });
+	  } else {
+	    obj[key] = value;
+	  }
+
+	  return obj;
+	}
+
+	var defineProperty = _defineProperty;
+
+	var lodash_clonedeep = createCommonjsModule(function (module, exports) {
+	/**
+	 * lodash (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+	 * Released under MIT license <https://lodash.com/license>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 */
+
+	/** Used as the size to enable large array optimizations. */
+	var LARGE_ARRAY_SIZE = 200;
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED = '__lodash_hash_undefined__';
+
+	/** Used as references for various `Number` constants. */
+	var MAX_SAFE_INTEGER = 9007199254740991;
+
+	/** `Object#toString` result references. */
+	var argsTag = '[object Arguments]',
+	    arrayTag = '[object Array]',
+	    boolTag = '[object Boolean]',
+	    dateTag = '[object Date]',
+	    errorTag = '[object Error]',
+	    funcTag = '[object Function]',
+	    genTag = '[object GeneratorFunction]',
+	    mapTag = '[object Map]',
+	    numberTag = '[object Number]',
+	    objectTag = '[object Object]',
+	    promiseTag = '[object Promise]',
+	    regexpTag = '[object RegExp]',
+	    setTag = '[object Set]',
+	    stringTag = '[object String]',
+	    symbolTag = '[object Symbol]',
+	    weakMapTag = '[object WeakMap]';
+
+	var arrayBufferTag = '[object ArrayBuffer]',
+	    dataViewTag = '[object DataView]',
+	    float32Tag = '[object Float32Array]',
+	    float64Tag = '[object Float64Array]',
+	    int8Tag = '[object Int8Array]',
+	    int16Tag = '[object Int16Array]',
+	    int32Tag = '[object Int32Array]',
+	    uint8Tag = '[object Uint8Array]',
+	    uint8ClampedTag = '[object Uint8ClampedArray]',
+	    uint16Tag = '[object Uint16Array]',
+	    uint32Tag = '[object Uint32Array]';
+
+	/**
+	 * Used to match `RegExp`
+	 * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
+	 */
+	var reRegExpChar = /[\\^$.*+?()[\]{}|]/g;
+
+	/** Used to match `RegExp` flags from their coerced string values. */
+	var reFlags = /\w*$/;
+
+	/** Used to detect host constructors (Safari). */
+	var reIsHostCtor = /^\[object .+?Constructor\]$/;
+
+	/** Used to detect unsigned integer values. */
+	var reIsUint = /^(?:0|[1-9]\d*)$/;
+
+	/** Used to identify `toStringTag` values supported by `_.clone`. */
+	var cloneableTags = {};
+	cloneableTags[argsTag] = cloneableTags[arrayTag] =
+	cloneableTags[arrayBufferTag] = cloneableTags[dataViewTag] =
+	cloneableTags[boolTag] = cloneableTags[dateTag] =
+	cloneableTags[float32Tag] = cloneableTags[float64Tag] =
+	cloneableTags[int8Tag] = cloneableTags[int16Tag] =
+	cloneableTags[int32Tag] = cloneableTags[mapTag] =
+	cloneableTags[numberTag] = cloneableTags[objectTag] =
+	cloneableTags[regexpTag] = cloneableTags[setTag] =
+	cloneableTags[stringTag] = cloneableTags[symbolTag] =
+	cloneableTags[uint8Tag] = cloneableTags[uint8ClampedTag] =
+	cloneableTags[uint16Tag] = cloneableTags[uint32Tag] = true;
+	cloneableTags[errorTag] = cloneableTags[funcTag] =
+	cloneableTags[weakMapTag] = false;
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
+
+	/** Detect free variable `self`. */
+	var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root = freeGlobal || freeSelf || Function('return this')();
+
+	/** Detect free variable `exports`. */
+	var freeExports = exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule = freeExports && 'object' == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports = freeModule && freeModule.exports === freeExports;
+
+	/**
+	 * Adds the key-value `pair` to `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to modify.
+	 * @param {Array} pair The key-value pair to add.
+	 * @returns {Object} Returns `map`.
+	 */
+	function addMapEntry(map, pair) {
+	  // Don't return `map.set` because it's not chainable in IE 11.
+	  map.set(pair[0], pair[1]);
+	  return map;
+	}
+
+	/**
+	 * Adds `value` to `set`.
+	 *
+	 * @private
+	 * @param {Object} set The set to modify.
+	 * @param {*} value The value to add.
+	 * @returns {Object} Returns `set`.
+	 */
+	function addSetEntry(set, value) {
+	  // Don't return `set.add` because it's not chainable in IE 11.
+	  set.add(value);
+	  return set;
+	}
+
+	/**
+	 * A specialized version of `_.forEach` for arrays without support for
+	 * iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns `array`.
+	 */
+	function arrayEach(array, iteratee) {
+	  var index = -1,
+	      length = array ? array.length : 0;
+
+	  while (++index < length) {
+	    if (iteratee(array[index], index, array) === false) {
+	      break;
+	    }
+	  }
+	  return array;
+	}
+
+	/**
+	 * Appends the elements of `values` to `array`.
+	 *
+	 * @private
+	 * @param {Array} array The array to modify.
+	 * @param {Array} values The values to append.
+	 * @returns {Array} Returns `array`.
+	 */
+	function arrayPush(array, values) {
+	  var index = -1,
+	      length = values.length,
+	      offset = array.length;
+
+	  while (++index < length) {
+	    array[offset + index] = values[index];
+	  }
+	  return array;
+	}
+
+	/**
+	 * A specialized version of `_.reduce` for arrays without support for
+	 * iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @param {*} [accumulator] The initial value.
+	 * @param {boolean} [initAccum] Specify using the first element of `array` as
+	 *  the initial value.
+	 * @returns {*} Returns the accumulated value.
+	 */
+	function arrayReduce(array, iteratee, accumulator, initAccum) {
+	  var index = -1,
+	      length = array ? array.length : 0;
+
+	  if (initAccum && length) {
+	    accumulator = array[++index];
+	  }
+	  while (++index < length) {
+	    accumulator = iteratee(accumulator, array[index], index, array);
+	  }
+	  return accumulator;
+	}
+
+	/**
+	 * The base implementation of `_.times` without support for iteratee shorthands
+	 * or max array length checks.
+	 *
+	 * @private
+	 * @param {number} n The number of times to invoke `iteratee`.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the array of results.
+	 */
+	function baseTimes(n, iteratee) {
+	  var index = -1,
+	      result = Array(n);
+
+	  while (++index < n) {
+	    result[index] = iteratee(index);
+	  }
+	  return result;
+	}
+
+	/**
+	 * Gets the value at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} [object] The object to query.
+	 * @param {string} key The key of the property to get.
+	 * @returns {*} Returns the property value.
+	 */
+	function getValue(object, key) {
+	  return object == null ? undefined : object[key];
+	}
+
+	/**
+	 * Checks if `value` is a host object in IE < 9.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a host object, else `false`.
+	 */
+	function isHostObject(value) {
+	  // Many host objects are `Object` objects that can coerce to strings
+	  // despite having improperly defined `toString` methods.
+	  var result = false;
+	  if (value != null && typeof value.toString != 'function') {
+	    try {
+	      result = !!(value + '');
+	    } catch (e) {}
+	  }
+	  return result;
+	}
+
+	/**
+	 * Converts `map` to its key-value pairs.
+	 *
+	 * @private
+	 * @param {Object} map The map to convert.
+	 * @returns {Array} Returns the key-value pairs.
+	 */
+	function mapToArray(map) {
+	  var index = -1,
+	      result = Array(map.size);
+
+	  map.forEach(function(value, key) {
+	    result[++index] = [key, value];
+	  });
+	  return result;
+	}
+
+	/**
+	 * Creates a unary function that invokes `func` with its argument transformed.
+	 *
+	 * @private
+	 * @param {Function} func The function to wrap.
+	 * @param {Function} transform The argument transform.
+	 * @returns {Function} Returns the new function.
+	 */
+	function overArg(func, transform) {
+	  return function(arg) {
+	    return func(transform(arg));
+	  };
+	}
+
+	/**
+	 * Converts `set` to an array of its values.
+	 *
+	 * @private
+	 * @param {Object} set The set to convert.
+	 * @returns {Array} Returns the values.
+	 */
+	function setToArray(set) {
+	  var index = -1,
+	      result = Array(set.size);
+
+	  set.forEach(function(value) {
+	    result[++index] = value;
+	  });
+	  return result;
+	}
+
+	/** Used for built-in method references. */
+	var arrayProto = Array.prototype,
+	    funcProto = Function.prototype,
+	    objectProto = Object.prototype;
+
+	/** Used to detect overreaching core-js shims. */
+	var coreJsData = root['__core-js_shared__'];
+
+	/** Used to detect methods masquerading as native. */
+	var maskSrcKey = (function() {
+	  var uid = /[^.]+$/.exec(coreJsData && coreJsData.keys && coreJsData.keys.IE_PROTO || '');
+	  return uid ? ('Symbol(src)_1.' + uid) : '';
+	}());
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString = funcProto.toString;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty = objectProto.hasOwnProperty;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var objectToString = objectProto.toString;
+
+	/** Used to detect if a method is native. */
+	var reIsNative = RegExp('^' +
+	  funcToString.call(hasOwnProperty).replace(reRegExpChar, '\\$&')
+	  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
+	);
+
+	/** Built-in value references. */
+	var Buffer = moduleExports ? root.Buffer : undefined,
+	    Symbol = root.Symbol,
+	    Uint8Array = root.Uint8Array,
+	    getPrototype = overArg(Object.getPrototypeOf, Object),
+	    objectCreate = Object.create,
+	    propertyIsEnumerable = objectProto.propertyIsEnumerable,
+	    splice = arrayProto.splice;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeGetSymbols = Object.getOwnPropertySymbols,
+	    nativeIsBuffer = Buffer ? Buffer.isBuffer : undefined,
+	    nativeKeys = overArg(Object.keys, Object);
+
+	/* Built-in method references that are verified to be native. */
+	var DataView = getNative(root, 'DataView'),
+	    Map = getNative(root, 'Map'),
+	    Promise = getNative(root, 'Promise'),
+	    Set = getNative(root, 'Set'),
+	    WeakMap = getNative(root, 'WeakMap'),
+	    nativeCreate = getNative(Object, 'create');
+
+	/** Used to detect maps, sets, and weakmaps. */
+	var dataViewCtorString = toSource(DataView),
+	    mapCtorString = toSource(Map),
+	    promiseCtorString = toSource(Promise),
+	    setCtorString = toSource(Set),
+	    weakMapCtorString = toSource(WeakMap);
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto = Symbol ? Symbol.prototype : undefined,
+	    symbolValueOf = symbolProto ? symbolProto.valueOf : undefined;
+
+	/**
+	 * Creates a hash object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Hash(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the hash.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Hash
+	 */
+	function hashClear() {
+	  this.__data__ = nativeCreate ? nativeCreate(null) : {};
+	}
+
+	/**
+	 * Removes `key` and its value from the hash.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Hash
+	 * @param {Object} hash The hash to modify.
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function hashDelete(key) {
+	  return this.has(key) && delete this.__data__[key];
+	}
+
+	/**
+	 * Gets the hash value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function hashGet(key) {
+	  var data = this.__data__;
+	  if (nativeCreate) {
+	    var result = data[key];
+	    return result === HASH_UNDEFINED ? undefined : result;
+	  }
+	  return hasOwnProperty.call(data, key) ? data[key] : undefined;
+	}
+
+	/**
+	 * Checks if a hash value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Hash
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function hashHas(key) {
+	  var data = this.__data__;
+	  return nativeCreate ? data[key] !== undefined : hasOwnProperty.call(data, key);
+	}
+
+	/**
+	 * Sets the hash `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the hash instance.
+	 */
+	function hashSet(key, value) {
+	  var data = this.__data__;
+	  data[key] = (nativeCreate && value === undefined) ? HASH_UNDEFINED : value;
+	  return this;
+	}
+
+	// Add methods to `Hash`.
+	Hash.prototype.clear = hashClear;
+	Hash.prototype['delete'] = hashDelete;
+	Hash.prototype.get = hashGet;
+	Hash.prototype.has = hashHas;
+	Hash.prototype.set = hashSet;
+
+	/**
+	 * Creates an list cache object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function ListCache(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the list cache.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf ListCache
+	 */
+	function listCacheClear() {
+	  this.__data__ = [];
+	}
+
+	/**
+	 * Removes `key` and its value from the list cache.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function listCacheDelete(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    return false;
+	  }
+	  var lastIndex = data.length - 1;
+	  if (index == lastIndex) {
+	    data.pop();
+	  } else {
+	    splice.call(data, index, 1);
+	  }
+	  return true;
+	}
+
+	/**
+	 * Gets the list cache value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function listCacheGet(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  return index < 0 ? undefined : data[index][1];
+	}
+
+	/**
+	 * Checks if a list cache value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf ListCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function listCacheHas(key) {
+	  return assocIndexOf(this.__data__, key) > -1;
+	}
+
+	/**
+	 * Sets the list cache `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the list cache instance.
+	 */
+	function listCacheSet(key, value) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    data.push([key, value]);
+	  } else {
+	    data[index][1] = value;
+	  }
+	  return this;
+	}
+
+	// Add methods to `ListCache`.
+	ListCache.prototype.clear = listCacheClear;
+	ListCache.prototype['delete'] = listCacheDelete;
+	ListCache.prototype.get = listCacheGet;
+	ListCache.prototype.has = listCacheHas;
+	ListCache.prototype.set = listCacheSet;
+
+	/**
+	 * Creates a map cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function MapCache(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the map.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf MapCache
+	 */
+	function mapCacheClear() {
+	  this.__data__ = {
+	    'hash': new Hash,
+	    'map': new (Map || ListCache),
+	    'string': new Hash
+	  };
+	}
+
+	/**
+	 * Removes `key` and its value from the map.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function mapCacheDelete(key) {
+	  return getMapData(this, key)['delete'](key);
+	}
+
+	/**
+	 * Gets the map value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function mapCacheGet(key) {
+	  return getMapData(this, key).get(key);
+	}
+
+	/**
+	 * Checks if a map value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf MapCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function mapCacheHas(key) {
+	  return getMapData(this, key).has(key);
+	}
+
+	/**
+	 * Sets the map `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the map cache instance.
+	 */
+	function mapCacheSet(key, value) {
+	  getMapData(this, key).set(key, value);
+	  return this;
+	}
+
+	// Add methods to `MapCache`.
+	MapCache.prototype.clear = mapCacheClear;
+	MapCache.prototype['delete'] = mapCacheDelete;
+	MapCache.prototype.get = mapCacheGet;
+	MapCache.prototype.has = mapCacheHas;
+	MapCache.prototype.set = mapCacheSet;
+
+	/**
+	 * Creates a stack cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Stack(entries) {
+	  this.__data__ = new ListCache(entries);
+	}
+
+	/**
+	 * Removes all key-value entries from the stack.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Stack
+	 */
+	function stackClear() {
+	  this.__data__ = new ListCache;
+	}
+
+	/**
+	 * Removes `key` and its value from the stack.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function stackDelete(key) {
+	  return this.__data__['delete'](key);
+	}
+
+	/**
+	 * Gets the stack value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function stackGet(key) {
+	  return this.__data__.get(key);
+	}
+
+	/**
+	 * Checks if a stack value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Stack
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function stackHas(key) {
+	  return this.__data__.has(key);
+	}
+
+	/**
+	 * Sets the stack `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the stack cache instance.
+	 */
+	function stackSet(key, value) {
+	  var cache = this.__data__;
+	  if (cache instanceof ListCache) {
+	    var pairs = cache.__data__;
+	    if (!Map || (pairs.length < LARGE_ARRAY_SIZE - 1)) {
+	      pairs.push([key, value]);
+	      return this;
+	    }
+	    cache = this.__data__ = new MapCache(pairs);
+	  }
+	  cache.set(key, value);
+	  return this;
+	}
+
+	// Add methods to `Stack`.
+	Stack.prototype.clear = stackClear;
+	Stack.prototype['delete'] = stackDelete;
+	Stack.prototype.get = stackGet;
+	Stack.prototype.has = stackHas;
+	Stack.prototype.set = stackSet;
+
+	/**
+	 * Creates an array of the enumerable property names of the array-like `value`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @param {boolean} inherited Specify returning inherited property names.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function arrayLikeKeys(value, inherited) {
+	  // Safari 8.1 makes `arguments.callee` enumerable in strict mode.
+	  // Safari 9 makes `arguments.length` enumerable in strict mode.
+	  var result = (isArray(value) || isArguments(value))
+	    ? baseTimes(value.length, String)
+	    : [];
+
+	  var length = result.length,
+	      skipIndexes = !!length;
+
+	  for (var key in value) {
+	    if ((inherited || hasOwnProperty.call(value, key)) &&
+	        !(skipIndexes && (key == 'length' || isIndex(key, length)))) {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	/**
+	 * Assigns `value` to `key` of `object` if the existing value is not equivalent
+	 * using [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * for equality comparisons.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {string} key The key of the property to assign.
+	 * @param {*} value The value to assign.
+	 */
+	function assignValue(object, key, value) {
+	  var objValue = object[key];
+	  if (!(hasOwnProperty.call(object, key) && eq(objValue, value)) ||
+	      (value === undefined && !(key in object))) {
+	    object[key] = value;
+	  }
+	}
+
+	/**
+	 * Gets the index at which the `key` is found in `array` of key-value pairs.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} key The key to search for.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function assocIndexOf(array, key) {
+	  var length = array.length;
+	  while (length--) {
+	    if (eq(array[length][0], key)) {
+	      return length;
+	    }
+	  }
+	  return -1;
+	}
+
+	/**
+	 * The base implementation of `_.assign` without support for multiple sources
+	 * or `customizer` functions.
+	 *
+	 * @private
+	 * @param {Object} object The destination object.
+	 * @param {Object} source The source object.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseAssign(object, source) {
+	  return object && copyObject(source, keys(source), object);
+	}
+
+	/**
+	 * The base implementation of `_.clone` and `_.cloneDeep` which tracks
+	 * traversed objects.
+	 *
+	 * @private
+	 * @param {*} value The value to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @param {boolean} [isFull] Specify a clone including symbols.
+	 * @param {Function} [customizer] The function to customize cloning.
+	 * @param {string} [key] The key of `value`.
+	 * @param {Object} [object] The parent object of `value`.
+	 * @param {Object} [stack] Tracks traversed objects and their clone counterparts.
+	 * @returns {*} Returns the cloned value.
+	 */
+	function baseClone(value, isDeep, isFull, customizer, key, object, stack) {
+	  var result;
+	  if (customizer) {
+	    result = object ? customizer(value, key, object, stack) : customizer(value);
+	  }
+	  if (result !== undefined) {
+	    return result;
+	  }
+	  if (!isObject(value)) {
+	    return value;
+	  }
+	  var isArr = isArray(value);
+	  if (isArr) {
+	    result = initCloneArray(value);
+	    if (!isDeep) {
+	      return copyArray(value, result);
+	    }
+	  } else {
+	    var tag = getTag(value),
+	        isFunc = tag == funcTag || tag == genTag;
+
+	    if (isBuffer(value)) {
+	      return cloneBuffer(value, isDeep);
+	    }
+	    if (tag == objectTag || tag == argsTag || (isFunc && !object)) {
+	      if (isHostObject(value)) {
+	        return object ? value : {};
+	      }
+	      result = initCloneObject(isFunc ? {} : value);
+	      if (!isDeep) {
+	        return copySymbols(value, baseAssign(result, value));
+	      }
+	    } else {
+	      if (!cloneableTags[tag]) {
+	        return object ? value : {};
+	      }
+	      result = initCloneByTag(value, tag, baseClone, isDeep);
+	    }
+	  }
+	  // Check for circular references and return its corresponding clone.
+	  stack || (stack = new Stack);
+	  var stacked = stack.get(value);
+	  if (stacked) {
+	    return stacked;
+	  }
+	  stack.set(value, result);
+
+	  if (!isArr) {
+	    var props = isFull ? getAllKeys(value) : keys(value);
+	  }
+	  arrayEach(props || value, function(subValue, key) {
+	    if (props) {
+	      key = subValue;
+	      subValue = value[key];
+	    }
+	    // Recursively populate clone (susceptible to call stack limits).
+	    assignValue(result, key, baseClone(subValue, isDeep, isFull, customizer, key, value, stack));
+	  });
+	  return result;
+	}
+
+	/**
+	 * The base implementation of `_.create` without support for assigning
+	 * properties to the created object.
+	 *
+	 * @private
+	 * @param {Object} prototype The object to inherit from.
+	 * @returns {Object} Returns the new object.
+	 */
+	function baseCreate(proto) {
+	  return isObject(proto) ? objectCreate(proto) : {};
+	}
+
+	/**
+	 * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
+	 * `keysFunc` and `symbolsFunc` to get the enumerable property names and
+	 * symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {Function} keysFunc The function to get the keys of `object`.
+	 * @param {Function} symbolsFunc The function to get the symbols of `object`.
+	 * @returns {Array} Returns the array of property names and symbols.
+	 */
+	function baseGetAllKeys(object, keysFunc, symbolsFunc) {
+	  var result = keysFunc(object);
+	  return isArray(object) ? result : arrayPush(result, symbolsFunc(object));
+	}
+
+	/**
+	 * The base implementation of `getTag`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the `toStringTag`.
+	 */
+	function baseGetTag(value) {
+	  return objectToString.call(value);
+	}
+
+	/**
+	 * The base implementation of `_.isNative` without bad shim checks.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a native function,
+	 *  else `false`.
+	 */
+	function baseIsNative(value) {
+	  if (!isObject(value) || isMasked(value)) {
+	    return false;
+	  }
+	  var pattern = (isFunction(value) || isHostObject(value)) ? reIsNative : reIsHostCtor;
+	  return pattern.test(toSource(value));
+	}
+
+	/**
+	 * The base implementation of `_.keys` which doesn't treat sparse arrays as dense.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function baseKeys(object) {
+	  if (!isPrototype(object)) {
+	    return nativeKeys(object);
+	  }
+	  var result = [];
+	  for (var key in Object(object)) {
+	    if (hasOwnProperty.call(object, key) && key != 'constructor') {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	/**
+	 * Creates a clone of  `buffer`.
+	 *
+	 * @private
+	 * @param {Buffer} buffer The buffer to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Buffer} Returns the cloned buffer.
+	 */
+	function cloneBuffer(buffer, isDeep) {
+	  if (isDeep) {
+	    return buffer.slice();
+	  }
+	  var result = new buffer.constructor(buffer.length);
+	  buffer.copy(result);
+	  return result;
+	}
+
+	/**
+	 * Creates a clone of `arrayBuffer`.
+	 *
+	 * @private
+	 * @param {ArrayBuffer} arrayBuffer The array buffer to clone.
+	 * @returns {ArrayBuffer} Returns the cloned array buffer.
+	 */
+	function cloneArrayBuffer(arrayBuffer) {
+	  var result = new arrayBuffer.constructor(arrayBuffer.byteLength);
+	  new Uint8Array(result).set(new Uint8Array(arrayBuffer));
+	  return result;
+	}
+
+	/**
+	 * Creates a clone of `dataView`.
+	 *
+	 * @private
+	 * @param {Object} dataView The data view to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned data view.
+	 */
+	function cloneDataView(dataView, isDeep) {
+	  var buffer = isDeep ? cloneArrayBuffer(dataView.buffer) : dataView.buffer;
+	  return new dataView.constructor(buffer, dataView.byteOffset, dataView.byteLength);
+	}
+
+	/**
+	 * Creates a clone of `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to clone.
+	 * @param {Function} cloneFunc The function to clone values.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned map.
+	 */
+	function cloneMap(map, isDeep, cloneFunc) {
+	  var array = isDeep ? cloneFunc(mapToArray(map), true) : mapToArray(map);
+	  return arrayReduce(array, addMapEntry, new map.constructor);
+	}
+
+	/**
+	 * Creates a clone of `regexp`.
+	 *
+	 * @private
+	 * @param {Object} regexp The regexp to clone.
+	 * @returns {Object} Returns the cloned regexp.
+	 */
+	function cloneRegExp(regexp) {
+	  var result = new regexp.constructor(regexp.source, reFlags.exec(regexp));
+	  result.lastIndex = regexp.lastIndex;
+	  return result;
+	}
+
+	/**
+	 * Creates a clone of `set`.
+	 *
+	 * @private
+	 * @param {Object} set The set to clone.
+	 * @param {Function} cloneFunc The function to clone values.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned set.
+	 */
+	function cloneSet(set, isDeep, cloneFunc) {
+	  var array = isDeep ? cloneFunc(setToArray(set), true) : setToArray(set);
+	  return arrayReduce(array, addSetEntry, new set.constructor);
+	}
+
+	/**
+	 * Creates a clone of the `symbol` object.
+	 *
+	 * @private
+	 * @param {Object} symbol The symbol object to clone.
+	 * @returns {Object} Returns the cloned symbol object.
+	 */
+	function cloneSymbol(symbol) {
+	  return symbolValueOf ? Object(symbolValueOf.call(symbol)) : {};
+	}
+
+	/**
+	 * Creates a clone of `typedArray`.
+	 *
+	 * @private
+	 * @param {Object} typedArray The typed array to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned typed array.
+	 */
+	function cloneTypedArray(typedArray, isDeep) {
+	  var buffer = isDeep ? cloneArrayBuffer(typedArray.buffer) : typedArray.buffer;
+	  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length);
+	}
+
+	/**
+	 * Copies the values of `source` to `array`.
+	 *
+	 * @private
+	 * @param {Array} source The array to copy values from.
+	 * @param {Array} [array=[]] The array to copy values to.
+	 * @returns {Array} Returns `array`.
+	 */
+	function copyArray(source, array) {
+	  var index = -1,
+	      length = source.length;
+
+	  array || (array = Array(length));
+	  while (++index < length) {
+	    array[index] = source[index];
+	  }
+	  return array;
+	}
+
+	/**
+	 * Copies properties of `source` to `object`.
+	 *
+	 * @private
+	 * @param {Object} source The object to copy properties from.
+	 * @param {Array} props The property identifiers to copy.
+	 * @param {Object} [object={}] The object to copy properties to.
+	 * @param {Function} [customizer] The function to customize copied values.
+	 * @returns {Object} Returns `object`.
+	 */
+	function copyObject(source, props, object, customizer) {
+	  object || (object = {});
+
+	  var index = -1,
+	      length = props.length;
+
+	  while (++index < length) {
+	    var key = props[index];
+
+	    var newValue = customizer
+	      ? customizer(object[key], source[key], key, object, source)
+	      : undefined;
+
+	    assignValue(object, key, newValue === undefined ? source[key] : newValue);
+	  }
+	  return object;
+	}
+
+	/**
+	 * Copies own symbol properties of `source` to `object`.
+	 *
+	 * @private
+	 * @param {Object} source The object to copy symbols from.
+	 * @param {Object} [object={}] The object to copy symbols to.
+	 * @returns {Object} Returns `object`.
+	 */
+	function copySymbols(source, object) {
+	  return copyObject(source, getSymbols(source), object);
+	}
+
+	/**
+	 * Creates an array of own enumerable property names and symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names and symbols.
+	 */
+	function getAllKeys(object) {
+	  return baseGetAllKeys(object, keys, getSymbols);
+	}
+
+	/**
+	 * Gets the data for `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to query.
+	 * @param {string} key The reference key.
+	 * @returns {*} Returns the map data.
+	 */
+	function getMapData(map, key) {
+	  var data = map.__data__;
+	  return isKeyable(key)
+	    ? data[typeof key == 'string' ? 'string' : 'hash']
+	    : data.map;
+	}
+
+	/**
+	 * Gets the native function at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {string} key The key of the method to get.
+	 * @returns {*} Returns the function if it's native, else `undefined`.
+	 */
+	function getNative(object, key) {
+	  var value = getValue(object, key);
+	  return baseIsNative(value) ? value : undefined;
+	}
+
+	/**
+	 * Creates an array of the own enumerable symbol properties of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of symbols.
+	 */
+	var getSymbols = nativeGetSymbols ? overArg(nativeGetSymbols, Object) : stubArray;
+
+	/**
+	 * Gets the `toStringTag` of `value`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the `toStringTag`.
+	 */
+	var getTag = baseGetTag;
+
+	// Fallback for data views, maps, sets, and weak maps in IE 11,
+	// for data views in Edge < 14, and promises in Node.js.
+	if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
+	    (Map && getTag(new Map) != mapTag) ||
+	    (Promise && getTag(Promise.resolve()) != promiseTag) ||
+	    (Set && getTag(new Set) != setTag) ||
+	    (WeakMap && getTag(new WeakMap) != weakMapTag)) {
+	  getTag = function(value) {
+	    var result = objectToString.call(value),
+	        Ctor = result == objectTag ? value.constructor : undefined,
+	        ctorString = Ctor ? toSource(Ctor) : undefined;
+
+	    if (ctorString) {
+	      switch (ctorString) {
+	        case dataViewCtorString: return dataViewTag;
+	        case mapCtorString: return mapTag;
+	        case promiseCtorString: return promiseTag;
+	        case setCtorString: return setTag;
+	        case weakMapCtorString: return weakMapTag;
+	      }
+	    }
+	    return result;
+	  };
+	}
+
+	/**
+	 * Initializes an array clone.
+	 *
+	 * @private
+	 * @param {Array} array The array to clone.
+	 * @returns {Array} Returns the initialized clone.
+	 */
+	function initCloneArray(array) {
+	  var length = array.length,
+	      result = array.constructor(length);
+
+	  // Add properties assigned by `RegExp#exec`.
+	  if (length && typeof array[0] == 'string' && hasOwnProperty.call(array, 'index')) {
+	    result.index = array.index;
+	    result.input = array.input;
+	  }
+	  return result;
+	}
+
+	/**
+	 * Initializes an object clone.
+	 *
+	 * @private
+	 * @param {Object} object The object to clone.
+	 * @returns {Object} Returns the initialized clone.
+	 */
+	function initCloneObject(object) {
+	  return (typeof object.constructor == 'function' && !isPrototype(object))
+	    ? baseCreate(getPrototype(object))
+	    : {};
+	}
+
+	/**
+	 * Initializes an object clone based on its `toStringTag`.
+	 *
+	 * **Note:** This function only supports cloning values with tags of
+	 * `Boolean`, `Date`, `Error`, `Number`, `RegExp`, or `String`.
+	 *
+	 * @private
+	 * @param {Object} object The object to clone.
+	 * @param {string} tag The `toStringTag` of the object to clone.
+	 * @param {Function} cloneFunc The function to clone values.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the initialized clone.
+	 */
+	function initCloneByTag(object, tag, cloneFunc, isDeep) {
+	  var Ctor = object.constructor;
+	  switch (tag) {
+	    case arrayBufferTag:
+	      return cloneArrayBuffer(object);
+
+	    case boolTag:
+	    case dateTag:
+	      return new Ctor(+object);
+
+	    case dataViewTag:
+	      return cloneDataView(object, isDeep);
+
+	    case float32Tag: case float64Tag:
+	    case int8Tag: case int16Tag: case int32Tag:
+	    case uint8Tag: case uint8ClampedTag: case uint16Tag: case uint32Tag:
+	      return cloneTypedArray(object, isDeep);
+
+	    case mapTag:
+	      return cloneMap(object, isDeep, cloneFunc);
+
+	    case numberTag:
+	    case stringTag:
+	      return new Ctor(object);
+
+	    case regexpTag:
+	      return cloneRegExp(object);
+
+	    case setTag:
+	      return cloneSet(object, isDeep, cloneFunc);
+
+	    case symbolTag:
+	      return cloneSymbol(object);
+	  }
+	}
+
+	/**
+	 * Checks if `value` is a valid array-like index.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
+	 * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
+	 */
+	function isIndex(value, length) {
+	  length = length == null ? MAX_SAFE_INTEGER : length;
+	  return !!length &&
+	    (typeof value == 'number' || reIsUint.test(value)) &&
+	    (value > -1 && value % 1 == 0 && value < length);
+	}
+
+	/**
+	 * Checks if `value` is suitable for use as unique object key.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
+	 */
+	function isKeyable(value) {
+	  var type = typeof value;
+	  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
+	    ? (value !== '__proto__')
+	    : (value === null);
+	}
+
+	/**
+	 * Checks if `func` has its source masked.
+	 *
+	 * @private
+	 * @param {Function} func The function to check.
+	 * @returns {boolean} Returns `true` if `func` is masked, else `false`.
+	 */
+	function isMasked(func) {
+	  return !!maskSrcKey && (maskSrcKey in func);
+	}
+
+	/**
+	 * Checks if `value` is likely a prototype object.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a prototype, else `false`.
+	 */
+	function isPrototype(value) {
+	  var Ctor = value && value.constructor,
+	      proto = (typeof Ctor == 'function' && Ctor.prototype) || objectProto;
+
+	  return value === proto;
+	}
+
+	/**
+	 * Converts `func` to its source code.
+	 *
+	 * @private
+	 * @param {Function} func The function to process.
+	 * @returns {string} Returns the source code.
+	 */
+	function toSource(func) {
+	  if (func != null) {
+	    try {
+	      return funcToString.call(func);
+	    } catch (e) {}
+	    try {
+	      return (func + '');
+	    } catch (e) {}
+	  }
+	  return '';
+	}
+
+	/**
+	 * This method is like `_.clone` except that it recursively clones `value`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 1.0.0
+	 * @category Lang
+	 * @param {*} value The value to recursively clone.
+	 * @returns {*} Returns the deep cloned value.
+	 * @see _.clone
+	 * @example
+	 *
+	 * var objects = [{ 'a': 1 }, { 'b': 2 }];
+	 *
+	 * var deep = _.cloneDeep(objects);
+	 * console.log(deep[0] === objects[0]);
+	 * // => false
+	 */
+	function cloneDeep(value) {
+	  return baseClone(value, true, true);
+	}
+
+	/**
+	 * Performs a
+	 * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * comparison between two values to determine if they are equivalent.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to compare.
+	 * @param {*} other The other value to compare.
+	 * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 * var other = { 'a': 1 };
+	 *
+	 * _.eq(object, object);
+	 * // => true
+	 *
+	 * _.eq(object, other);
+	 * // => false
+	 *
+	 * _.eq('a', 'a');
+	 * // => true
+	 *
+	 * _.eq('a', Object('a'));
+	 * // => false
+	 *
+	 * _.eq(NaN, NaN);
+	 * // => true
+	 */
+	function eq(value, other) {
+	  return value === other || (value !== value && other !== other);
+	}
+
+	/**
+	 * Checks if `value` is likely an `arguments` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isArguments(function() { return arguments; }());
+	 * // => true
+	 *
+	 * _.isArguments([1, 2, 3]);
+	 * // => false
+	 */
+	function isArguments(value) {
+	  // Safari 8.1 makes `arguments.callee` enumerable in strict mode.
+	  return isArrayLikeObject(value) && hasOwnProperty.call(value, 'callee') &&
+	    (!propertyIsEnumerable.call(value, 'callee') || objectToString.call(value) == argsTag);
+	}
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray = Array.isArray;
+
+	/**
+	 * Checks if `value` is array-like. A value is considered array-like if it's
+	 * not a function and has a `value.length` that's an integer greater than or
+	 * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
+	 * @example
+	 *
+	 * _.isArrayLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArrayLike(document.body.children);
+	 * // => true
+	 *
+	 * _.isArrayLike('abc');
+	 * // => true
+	 *
+	 * _.isArrayLike(_.noop);
+	 * // => false
+	 */
+	function isArrayLike(value) {
+	  return value != null && isLength(value.length) && !isFunction(value);
+	}
+
+	/**
+	 * This method is like `_.isArrayLike` except that it also checks if `value`
+	 * is an object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array-like object,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isArrayLikeObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArrayLikeObject(document.body.children);
+	 * // => true
+	 *
+	 * _.isArrayLikeObject('abc');
+	 * // => false
+	 *
+	 * _.isArrayLikeObject(_.noop);
+	 * // => false
+	 */
+	function isArrayLikeObject(value) {
+	  return isObjectLike(value) && isArrayLike(value);
+	}
+
+	/**
+	 * Checks if `value` is a buffer.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.3.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a buffer, else `false`.
+	 * @example
+	 *
+	 * _.isBuffer(new Buffer(2));
+	 * // => true
+	 *
+	 * _.isBuffer(new Uint8Array(2));
+	 * // => false
+	 */
+	var isBuffer = nativeIsBuffer || stubFalse;
+
+	/**
+	 * Checks if `value` is classified as a `Function` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+	 * @example
+	 *
+	 * _.isFunction(_);
+	 * // => true
+	 *
+	 * _.isFunction(/abc/);
+	 * // => false
+	 */
+	function isFunction(value) {
+	  // The use of `Object#toString` avoids issues with the `typeof` operator
+	  // in Safari 8-9 which returns 'object' for typed array and other constructors.
+	  var tag = isObject(value) ? objectToString.call(value) : '';
+	  return tag == funcTag || tag == genTag;
+	}
+
+	/**
+	 * Checks if `value` is a valid array-like length.
+	 *
+	 * **Note:** This method is loosely based on
+	 * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
+	 * @example
+	 *
+	 * _.isLength(3);
+	 * // => true
+	 *
+	 * _.isLength(Number.MIN_VALUE);
+	 * // => false
+	 *
+	 * _.isLength(Infinity);
+	 * // => false
+	 *
+	 * _.isLength('3');
+	 * // => false
+	 */
+	function isLength(value) {
+	  return typeof value == 'number' &&
+	    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
+	}
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject(value) {
+	  var type = typeof value;
+	  return !!value && (type == 'object' || type == 'function');
+	}
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike(value) {
+	  return !!value && typeof value == 'object';
+	}
+
+	/**
+	 * Creates an array of the own enumerable property names of `object`.
+	 *
+	 * **Note:** Non-object values are coerced to objects. See the
+	 * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+	 * for more details.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.keys(new Foo);
+	 * // => ['a', 'b'] (iteration order is not guaranteed)
+	 *
+	 * _.keys('hi');
+	 * // => ['0', '1']
+	 */
+	function keys(object) {
+	  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
+	}
+
+	/**
+	 * This method returns a new empty array.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.13.0
+	 * @category Util
+	 * @returns {Array} Returns the new empty array.
+	 * @example
+	 *
+	 * var arrays = _.times(2, _.stubArray);
+	 *
+	 * console.log(arrays);
+	 * // => [[], []]
+	 *
+	 * console.log(arrays[0] === arrays[1]);
+	 * // => false
+	 */
+	function stubArray() {
+	  return [];
+	}
+
+	/**
+	 * This method returns `false`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.13.0
+	 * @category Util
+	 * @returns {boolean} Returns `false`.
+	 * @example
+	 *
+	 * _.times(2, _.stubFalse);
+	 * // => [false, false]
+	 */
+	function stubFalse() {
+	  return false;
+	}
+
+	module.exports = cloneDeep;
+	});
+
+	var classnames = createCommonjsModule(function (module) {
+	/*!
+	  Copyright (c) 2017 Jed Watson.
+	  Licensed under the MIT License (MIT), see
+	  http://jedwatson.github.io/classnames
+	*/
+	/* global define */
+
+	(function () {
+
+		var hasOwn = {}.hasOwnProperty;
+
+		function classNames () {
+			var arguments$1 = arguments;
+
+			var classes = [];
+
+			for (var i = 0; i < arguments.length; i++) {
+				var arg = arguments$1[i];
+				if (!arg) { continue; }
+
+				var argType = typeof arg;
+
+				if (argType === 'string' || argType === 'number') {
+					classes.push(arg);
+				} else if (Array.isArray(arg) && arg.length) {
+					var inner = classNames.apply(null, arg);
+					if (inner) {
+						classes.push(inner);
+					}
+				} else if (argType === 'object') {
+					for (var key in arg) {
+						if (hasOwn.call(arg, key) && arg[key]) {
+							classes.push(key);
+						}
+					}
+				}
+			}
+
+			return classes.join(' ');
+		}
+
+		if (module.exports) {
+			classNames.default = classNames;
+			module.exports = classNames;
+		} else {
+			window.classNames = classNames;
+		}
+	}());
+	});
+
+	/**
+	 * lodash 3.0.1 (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modern modularize exports="npm" -o ./`
+	 * Copyright 2012-2015 The Dojo Foundation <http://dojofoundation.org/>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 * Available under MIT license <https://lodash.com/license>
+	 */
+
+	/**
+	 * Checks if `value` is `undefined`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is `undefined`, else `false`.
+	 * @example
+	 *
+	 * _.isUndefined(void 0);
+	 * // => true
+	 *
+	 * _.isUndefined(null);
+	 * // => false
+	 */
+	function isUndefined(value) {
+	  return value === undefined;
+	}
+
+	var lodash_isundefined = isUndefined;
+
+	/**
+	 * lodash (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+	 * Released under MIT license <https://lodash.com/license>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 */
+
+	/** Used as the `TypeError` message for "Functions" methods. */
+	var FUNC_ERROR_TEXT = 'Expected a function';
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED = '__lodash_hash_undefined__';
+
+	/** Used as references for various `Number` constants. */
+	var INFINITY = 1 / 0,
+	    MAX_SAFE_INTEGER = 9007199254740991;
+
+	/** `Object#toString` result references. */
+	var funcTag = '[object Function]',
+	    genTag = '[object GeneratorFunction]',
+	    symbolTag = '[object Symbol]';
+
+	/** Used to match property names within property paths. */
+	var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
+	    reIsPlainProp = /^\w*$/,
+	    reLeadingDot = /^\./,
+	    rePropName = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
+
+	/**
+	 * Used to match `RegExp`
+	 * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
+	 */
+	var reRegExpChar = /[\\^$.*+?()[\]{}|]/g;
+
+	/** Used to match backslashes in property paths. */
+	var reEscapeChar = /\\(\\)?/g;
+
+	/** Used to detect host constructors (Safari). */
+	var reIsHostCtor = /^\[object .+?Constructor\]$/;
+
+	/** Used to detect unsigned integer values. */
+	var reIsUint = /^(?:0|[1-9]\d*)$/;
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
+
+	/** Detect free variable `self`. */
+	var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root = freeGlobal || freeSelf || Function('return this')();
+
+	/**
+	 * Gets the value at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} [object] The object to query.
+	 * @param {string} key The key of the property to get.
+	 * @returns {*} Returns the property value.
+	 */
+	function getValue(object, key) {
+	  return object == null ? undefined : object[key];
+	}
+
+	/**
+	 * Checks if `value` is a host object in IE < 9.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a host object, else `false`.
+	 */
+	function isHostObject(value) {
+	  // Many host objects are `Object` objects that can coerce to strings
+	  // despite having improperly defined `toString` methods.
+	  var result = false;
+	  if (value != null && typeof value.toString != 'function') {
+	    try {
+	      result = !!(value + '');
+	    } catch (e) {}
+	  }
+	  return result;
+	}
+
+	/** Used for built-in method references. */
+	var arrayProto = Array.prototype,
+	    funcProto = Function.prototype,
+	    objectProto = Object.prototype;
+
+	/** Used to detect overreaching core-js shims. */
+	var coreJsData = root['__core-js_shared__'];
+
+	/** Used to detect methods masquerading as native. */
+	var maskSrcKey = (function() {
+	  var uid = /[^.]+$/.exec(coreJsData && coreJsData.keys && coreJsData.keys.IE_PROTO || '');
+	  return uid ? ('Symbol(src)_1.' + uid) : '';
+	}());
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString = funcProto.toString;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$1 = objectProto.hasOwnProperty;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var objectToString = objectProto.toString;
+
+	/** Used to detect if a method is native. */
+	var reIsNative = RegExp('^' +
+	  funcToString.call(hasOwnProperty$1).replace(reRegExpChar, '\\$&')
+	  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
+	);
+
+	/** Built-in value references. */
+	var Symbol$1 = root.Symbol,
+	    splice = arrayProto.splice;
+
+	/* Built-in method references that are verified to be native. */
+	var Map$1 = getNative(root, 'Map'),
+	    nativeCreate = getNative(Object, 'create');
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto = Symbol$1 ? Symbol$1.prototype : undefined,
+	    symbolToString = symbolProto ? symbolProto.toString : undefined;
+
+	/**
+	 * Creates a hash object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Hash(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the hash.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Hash
+	 */
+	function hashClear() {
+	  this.__data__ = nativeCreate ? nativeCreate(null) : {};
+	}
+
+	/**
+	 * Removes `key` and its value from the hash.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Hash
+	 * @param {Object} hash The hash to modify.
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function hashDelete(key) {
+	  return this.has(key) && delete this.__data__[key];
+	}
+
+	/**
+	 * Gets the hash value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function hashGet(key) {
+	  var data = this.__data__;
+	  if (nativeCreate) {
+	    var result = data[key];
+	    return result === HASH_UNDEFINED ? undefined : result;
+	  }
+	  return hasOwnProperty$1.call(data, key) ? data[key] : undefined;
+	}
+
+	/**
+	 * Checks if a hash value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Hash
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function hashHas(key) {
+	  var data = this.__data__;
+	  return nativeCreate ? data[key] !== undefined : hasOwnProperty$1.call(data, key);
+	}
+
+	/**
+	 * Sets the hash `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the hash instance.
+	 */
+	function hashSet(key, value) {
+	  var data = this.__data__;
+	  data[key] = (nativeCreate && value === undefined) ? HASH_UNDEFINED : value;
+	  return this;
+	}
+
+	// Add methods to `Hash`.
+	Hash.prototype.clear = hashClear;
+	Hash.prototype['delete'] = hashDelete;
+	Hash.prototype.get = hashGet;
+	Hash.prototype.has = hashHas;
+	Hash.prototype.set = hashSet;
+
+	/**
+	 * Creates an list cache object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function ListCache(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the list cache.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf ListCache
+	 */
+	function listCacheClear() {
+	  this.__data__ = [];
+	}
+
+	/**
+	 * Removes `key` and its value from the list cache.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function listCacheDelete(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    return false;
+	  }
+	  var lastIndex = data.length - 1;
+	  if (index == lastIndex) {
+	    data.pop();
+	  } else {
+	    splice.call(data, index, 1);
+	  }
+	  return true;
+	}
+
+	/**
+	 * Gets the list cache value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function listCacheGet(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  return index < 0 ? undefined : data[index][1];
+	}
+
+	/**
+	 * Checks if a list cache value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf ListCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function listCacheHas(key) {
+	  return assocIndexOf(this.__data__, key) > -1;
+	}
+
+	/**
+	 * Sets the list cache `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the list cache instance.
+	 */
+	function listCacheSet(key, value) {
+	  var data = this.__data__,
+	      index = assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    data.push([key, value]);
+	  } else {
+	    data[index][1] = value;
+	  }
+	  return this;
+	}
+
+	// Add methods to `ListCache`.
+	ListCache.prototype.clear = listCacheClear;
+	ListCache.prototype['delete'] = listCacheDelete;
+	ListCache.prototype.get = listCacheGet;
+	ListCache.prototype.has = listCacheHas;
+	ListCache.prototype.set = listCacheSet;
+
+	/**
+	 * Creates a map cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function MapCache(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the map.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf MapCache
+	 */
+	function mapCacheClear() {
+	  this.__data__ = {
+	    'hash': new Hash,
+	    'map': new (Map$1 || ListCache),
+	    'string': new Hash
+	  };
+	}
+
+	/**
+	 * Removes `key` and its value from the map.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function mapCacheDelete(key) {
+	  return getMapData(this, key)['delete'](key);
+	}
+
+	/**
+	 * Gets the map value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function mapCacheGet(key) {
+	  return getMapData(this, key).get(key);
+	}
+
+	/**
+	 * Checks if a map value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf MapCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function mapCacheHas(key) {
+	  return getMapData(this, key).has(key);
+	}
+
+	/**
+	 * Sets the map `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the map cache instance.
+	 */
+	function mapCacheSet(key, value) {
+	  getMapData(this, key).set(key, value);
+	  return this;
+	}
+
+	// Add methods to `MapCache`.
+	MapCache.prototype.clear = mapCacheClear;
+	MapCache.prototype['delete'] = mapCacheDelete;
+	MapCache.prototype.get = mapCacheGet;
+	MapCache.prototype.has = mapCacheHas;
+	MapCache.prototype.set = mapCacheSet;
+
+	/**
+	 * Assigns `value` to `key` of `object` if the existing value is not equivalent
+	 * using [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * for equality comparisons.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {string} key The key of the property to assign.
+	 * @param {*} value The value to assign.
+	 */
+	function assignValue(object, key, value) {
+	  var objValue = object[key];
+	  if (!(hasOwnProperty$1.call(object, key) && eq(objValue, value)) ||
+	      (value === undefined && !(key in object))) {
+	    object[key] = value;
+	  }
+	}
+
+	/**
+	 * Gets the index at which the `key` is found in `array` of key-value pairs.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} key The key to search for.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function assocIndexOf(array, key) {
+	  var length = array.length;
+	  while (length--) {
+	    if (eq(array[length][0], key)) {
+	      return length;
+	    }
+	  }
+	  return -1;
+	}
+
+	/**
+	 * The base implementation of `_.isNative` without bad shim checks.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a native function,
+	 *  else `false`.
+	 */
+	function baseIsNative(value) {
+	  if (!isObject(value) || isMasked(value)) {
+	    return false;
+	  }
+	  var pattern = (isFunction(value) || isHostObject(value)) ? reIsNative : reIsHostCtor;
+	  return pattern.test(toSource(value));
+	}
+
+	/**
+	 * The base implementation of `_.set`.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {Array|string} path The path of the property to set.
+	 * @param {*} value The value to set.
+	 * @param {Function} [customizer] The function to customize path creation.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseSet(object, path, value, customizer) {
+	  if (!isObject(object)) {
+	    return object;
+	  }
+	  path = isKey(path, object) ? [path] : castPath(path);
+
+	  var index = -1,
+	      length = path.length,
+	      lastIndex = length - 1,
+	      nested = object;
+
+	  while (nested != null && ++index < length) {
+	    var key = toKey(path[index]),
+	        newValue = value;
+
+	    if (index != lastIndex) {
+	      var objValue = nested[key];
+	      newValue = customizer ? customizer(objValue, key, nested) : undefined;
+	      if (newValue === undefined) {
+	        newValue = isObject(objValue)
+	          ? objValue
+	          : (isIndex(path[index + 1]) ? [] : {});
+	      }
+	    }
+	    assignValue(nested, key, newValue);
+	    nested = nested[key];
+	  }
+	  return object;
+	}
+
+	/**
+	 * The base implementation of `_.toString` which doesn't convert nullish
+	 * values to empty strings.
+	 *
+	 * @private
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 */
+	function baseToString(value) {
+	  // Exit early for strings to avoid a performance hit in some environments.
+	  if (typeof value == 'string') {
+	    return value;
+	  }
+	  if (isSymbol(value)) {
+	    return symbolToString ? symbolToString.call(value) : '';
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+	}
+
+	/**
+	 * Casts `value` to a path array if it's not one.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {Array} Returns the cast property path array.
+	 */
+	function castPath(value) {
+	  return isArray(value) ? value : stringToPath(value);
+	}
+
+	/**
+	 * Gets the data for `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to query.
+	 * @param {string} key The reference key.
+	 * @returns {*} Returns the map data.
+	 */
+	function getMapData(map, key) {
+	  var data = map.__data__;
+	  return isKeyable(key)
+	    ? data[typeof key == 'string' ? 'string' : 'hash']
+	    : data.map;
+	}
+
+	/**
+	 * Gets the native function at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {string} key The key of the method to get.
+	 * @returns {*} Returns the function if it's native, else `undefined`.
+	 */
+	function getNative(object, key) {
+	  var value = getValue(object, key);
+	  return baseIsNative(value) ? value : undefined;
+	}
+
+	/**
+	 * Checks if `value` is a valid array-like index.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
+	 * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
+	 */
+	function isIndex(value, length) {
+	  length = length == null ? MAX_SAFE_INTEGER : length;
+	  return !!length &&
+	    (typeof value == 'number' || reIsUint.test(value)) &&
+	    (value > -1 && value % 1 == 0 && value < length);
+	}
+
+	/**
+	 * Checks if `value` is a property name and not a property path.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {Object} [object] The object to query keys on.
+	 * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
+	 */
+	function isKey(value, object) {
+	  if (isArray(value)) {
+	    return false;
+	  }
+	  var type = typeof value;
+	  if (type == 'number' || type == 'symbol' || type == 'boolean' ||
+	      value == null || isSymbol(value)) {
+	    return true;
+	  }
+	  return reIsPlainProp.test(value) || !reIsDeepProp.test(value) ||
+	    (object != null && value in Object(object));
+	}
+
+	/**
+	 * Checks if `value` is suitable for use as unique object key.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
+	 */
+	function isKeyable(value) {
+	  var type = typeof value;
+	  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
+	    ? (value !== '__proto__')
+	    : (value === null);
+	}
+
+	/**
+	 * Checks if `func` has its source masked.
+	 *
+	 * @private
+	 * @param {Function} func The function to check.
+	 * @returns {boolean} Returns `true` if `func` is masked, else `false`.
+	 */
+	function isMasked(func) {
+	  return !!maskSrcKey && (maskSrcKey in func);
+	}
+
+	/**
+	 * Converts `string` to a property path array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the property path array.
+	 */
+	var stringToPath = memoize$1(function(string) {
+	  string = toString(string);
+
+	  var result = [];
+	  if (reLeadingDot.test(string)) {
+	    result.push('');
+	  }
+	  string.replace(rePropName, function(match, number, quote, string) {
+	    result.push(quote ? string.replace(reEscapeChar, '$1') : (number || match));
+	  });
+	  return result;
+	});
+
+	/**
+	 * Converts `value` to a string key if it's not a string or symbol.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {string|symbol} Returns the key.
+	 */
+	function toKey(value) {
+	  if (typeof value == 'string' || isSymbol(value)) {
+	    return value;
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+	}
+
+	/**
+	 * Converts `func` to its source code.
+	 *
+	 * @private
+	 * @param {Function} func The function to process.
+	 * @returns {string} Returns the source code.
+	 */
+	function toSource(func) {
+	  if (func != null) {
+	    try {
+	      return funcToString.call(func);
+	    } catch (e) {}
+	    try {
+	      return (func + '');
+	    } catch (e) {}
+	  }
+	  return '';
+	}
+
+	/**
+	 * Creates a function that memoizes the result of `func`. If `resolver` is
+	 * provided, it determines the cache key for storing the result based on the
+	 * arguments provided to the memoized function. By default, the first argument
+	 * provided to the memoized function is used as the map cache key. The `func`
+	 * is invoked with the `this` binding of the memoized function.
+	 *
+	 * **Note:** The cache is exposed as the `cache` property on the memoized
+	 * function. Its creation may be customized by replacing the `_.memoize.Cache`
+	 * constructor with one whose instances implement the
+	 * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
+	 * method interface of `delete`, `get`, `has`, and `set`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Function
+	 * @param {Function} func The function to have its output memoized.
+	 * @param {Function} [resolver] The function to resolve the cache key.
+	 * @returns {Function} Returns the new memoized function.
+	 * @example
+	 *
+	 * var object = { 'a': 1, 'b': 2 };
+	 * var other = { 'c': 3, 'd': 4 };
+	 *
+	 * var values = _.memoize(_.values);
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * values(other);
+	 * // => [3, 4]
+	 *
+	 * object.a = 2;
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * // Modify the result cache.
+	 * values.cache.set(object, ['a', 'b']);
+	 * values(object);
+	 * // => ['a', 'b']
+	 *
+	 * // Replace `_.memoize.Cache`.
+	 * _.memoize.Cache = WeakMap;
+	 */
+	function memoize$1(func, resolver) {
+	  if (typeof func != 'function' || (resolver && typeof resolver != 'function')) {
+	    throw new TypeError(FUNC_ERROR_TEXT);
+	  }
+	  var memoized = function() {
+	    var args = arguments,
+	        key = resolver ? resolver.apply(this, args) : args[0],
+	        cache = memoized.cache;
+
+	    if (cache.has(key)) {
+	      return cache.get(key);
+	    }
+	    var result = func.apply(this, args);
+	    memoized.cache = cache.set(key, result);
+	    return result;
+	  };
+	  memoized.cache = new (memoize$1.Cache || MapCache);
+	  return memoized;
+	}
+
+	// Assign cache to `_.memoize`.
+	memoize$1.Cache = MapCache;
+
+	/**
+	 * Performs a
+	 * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * comparison between two values to determine if they are equivalent.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to compare.
+	 * @param {*} other The other value to compare.
+	 * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 * var other = { 'a': 1 };
+	 *
+	 * _.eq(object, object);
+	 * // => true
+	 *
+	 * _.eq(object, other);
+	 * // => false
+	 *
+	 * _.eq('a', 'a');
+	 * // => true
+	 *
+	 * _.eq('a', Object('a'));
+	 * // => false
+	 *
+	 * _.eq(NaN, NaN);
+	 * // => true
+	 */
+	function eq(value, other) {
+	  return value === other || (value !== value && other !== other);
+	}
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray = Array.isArray;
+
+	/**
+	 * Checks if `value` is classified as a `Function` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+	 * @example
+	 *
+	 * _.isFunction(_);
+	 * // => true
+	 *
+	 * _.isFunction(/abc/);
+	 * // => false
+	 */
+	function isFunction(value) {
+	  // The use of `Object#toString` avoids issues with the `typeof` operator
+	  // in Safari 8-9 which returns 'object' for typed array and other constructors.
+	  var tag = isObject(value) ? objectToString.call(value) : '';
+	  return tag == funcTag || tag == genTag;
+	}
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject(value) {
+	  var type = typeof value;
+	  return !!value && (type == 'object' || type == 'function');
+	}
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike(value) {
+	  return !!value && typeof value == 'object';
+	}
+
+	/**
+	 * Checks if `value` is classified as a `Symbol` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+	 * @example
+	 *
+	 * _.isSymbol(Symbol.iterator);
+	 * // => true
+	 *
+	 * _.isSymbol('abc');
+	 * // => false
+	 */
+	function isSymbol(value) {
+	  return typeof value == 'symbol' ||
+	    (isObjectLike(value) && objectToString.call(value) == symbolTag);
+	}
+
+	/**
+	 * Converts `value` to a string. An empty string is returned for `null`
+	 * and `undefined` values. The sign of `-0` is preserved.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 * @example
+	 *
+	 * _.toString(null);
+	 * // => ''
+	 *
+	 * _.toString(-0);
+	 * // => '-0'
+	 *
+	 * _.toString([1, 2, 3]);
+	 * // => '1,2,3'
+	 */
+	function toString(value) {
+	  return value == null ? '' : baseToString(value);
+	}
+
+	/**
+	 * Sets the value at `path` of `object`. If a portion of `path` doesn't exist,
+	 * it's created. Arrays are created for missing index properties while objects
+	 * are created for all other missing properties. Use `_.setWith` to customize
+	 * `path` creation.
+	 *
+	 * **Note:** This method mutates `object`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.7.0
+	 * @category Object
+	 * @param {Object} object The object to modify.
+	 * @param {Array|string} path The path of the property to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns `object`.
+	 * @example
+	 *
+	 * var object = { 'a': [{ 'b': { 'c': 3 } }] };
+	 *
+	 * _.set(object, 'a[0].b.c', 4);
+	 * console.log(object.a[0].b.c);
+	 * // => 4
+	 *
+	 * _.set(object, ['x', '0', 'y', 'z'], 5);
+	 * console.log(object.x[0].y.z);
+	 * // => 5
+	 */
+	function set(object, path, value) {
+	  return object == null ? object : baseSet(object, path, value);
+	}
+
+	var lodash_set = set;
+
+	/**
+	 * lodash 4.0.1 (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright 2012-2016 The Dojo Foundation <http://dojofoundation.org/>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright 2009-2016 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 * Available under MIT license <https://lodash.com/license>
+	 */
+
+	/** `Object#toString` result references. */
+	var stringTag = '[object String]';
+
+	/** Used for built-in method references. */
+	var objectProto$1 = Object.prototype;
+
+	/**
+	 * Used to resolve the [`toStringTag`](http://ecma-international.org/ecma-262/6.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var objectToString$1 = objectProto$1.toString;
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @type Function
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is correctly classified, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray$1 = Array.isArray;
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike$1(value) {
+	  return !!value && typeof value == 'object';
+	}
+
+	/**
+	 * Checks if `value` is classified as a `String` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is correctly classified, else `false`.
+	 * @example
+	 *
+	 * _.isString('abc');
+	 * // => true
+	 *
+	 * _.isString(1);
+	 * // => false
+	 */
+	function isString(value) {
+	  return typeof value == 'string' ||
+	    (!isArray$1(value) && isObjectLike$1(value) && objectToString$1.call(value) == stringTag);
+	}
+
+	var lodash_isstring = isString;
+
+	/**
+	 * lodash (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+	 * Released under MIT license <https://lodash.com/license>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 */
+
+	/** Used as the `TypeError` message for "Functions" methods. */
+	var FUNC_ERROR_TEXT$1 = 'Expected a function';
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED$1 = '__lodash_hash_undefined__';
+
+	/** Used as references for various `Number` constants. */
+	var INFINITY$1 = 1 / 0;
+
+	/** `Object#toString` result references. */
+	var funcTag$1 = '[object Function]',
+	    genTag$1 = '[object GeneratorFunction]',
+	    symbolTag$1 = '[object Symbol]';
+
+	/** Used to match property names within property paths. */
+	var reIsDeepProp$1 = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
+	    reIsPlainProp$1 = /^\w*$/,
+	    reLeadingDot$1 = /^\./,
+	    rePropName$1 = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
+
+	/**
+	 * Used to match `RegExp`
+	 * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
+	 */
+	var reRegExpChar$1 = /[\\^$.*+?()[\]{}|]/g;
+
+	/** Used to match backslashes in property paths. */
+	var reEscapeChar$1 = /\\(\\)?/g;
+
+	/** Used to detect host constructors (Safari). */
+	var reIsHostCtor$1 = /^\[object .+?Constructor\]$/;
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal$1 = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
+
+	/** Detect free variable `self`. */
+	var freeSelf$1 = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root$1 = freeGlobal$1 || freeSelf$1 || Function('return this')();
+
+	/**
+	 * Gets the value at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} [object] The object to query.
+	 * @param {string} key The key of the property to get.
+	 * @returns {*} Returns the property value.
+	 */
+	function getValue$1(object, key) {
+	  return object == null ? undefined : object[key];
+	}
+
+	/**
+	 * Checks if `value` is a host object in IE < 9.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a host object, else `false`.
+	 */
+	function isHostObject$1(value) {
+	  // Many host objects are `Object` objects that can coerce to strings
+	  // despite having improperly defined `toString` methods.
+	  var result = false;
+	  if (value != null && typeof value.toString != 'function') {
+	    try {
+	      result = !!(value + '');
+	    } catch (e) {}
+	  }
+	  return result;
+	}
+
+	/** Used for built-in method references. */
+	var arrayProto$1 = Array.prototype,
+	    funcProto$1 = Function.prototype,
+	    objectProto$2 = Object.prototype;
+
+	/** Used to detect overreaching core-js shims. */
+	var coreJsData$1 = root$1['__core-js_shared__'];
+
+	/** Used to detect methods masquerading as native. */
+	var maskSrcKey$1 = (function() {
+	  var uid = /[^.]+$/.exec(coreJsData$1 && coreJsData$1.keys && coreJsData$1.keys.IE_PROTO || '');
+	  return uid ? ('Symbol(src)_1.' + uid) : '';
+	}());
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString$1 = funcProto$1.toString;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$2 = objectProto$2.hasOwnProperty;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var objectToString$2 = objectProto$2.toString;
+
+	/** Used to detect if a method is native. */
+	var reIsNative$1 = RegExp('^' +
+	  funcToString$1.call(hasOwnProperty$2).replace(reRegExpChar$1, '\\$&')
+	  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
+	);
+
+	/** Built-in value references. */
+	var Symbol$2 = root$1.Symbol,
+	    splice$1 = arrayProto$1.splice;
+
+	/* Built-in method references that are verified to be native. */
+	var Map$2 = getNative$1(root$1, 'Map'),
+	    nativeCreate$1 = getNative$1(Object, 'create');
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto$1 = Symbol$2 ? Symbol$2.prototype : undefined,
+	    symbolToString$1 = symbolProto$1 ? symbolProto$1.toString : undefined;
+
+	/**
+	 * Creates a hash object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Hash$1(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the hash.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Hash
+	 */
+	function hashClear$1() {
+	  this.__data__ = nativeCreate$1 ? nativeCreate$1(null) : {};
+	}
+
+	/**
+	 * Removes `key` and its value from the hash.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Hash
+	 * @param {Object} hash The hash to modify.
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function hashDelete$1(key) {
+	  return this.has(key) && delete this.__data__[key];
+	}
+
+	/**
+	 * Gets the hash value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function hashGet$1(key) {
+	  var data = this.__data__;
+	  if (nativeCreate$1) {
+	    var result = data[key];
+	    return result === HASH_UNDEFINED$1 ? undefined : result;
+	  }
+	  return hasOwnProperty$2.call(data, key) ? data[key] : undefined;
+	}
+
+	/**
+	 * Checks if a hash value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Hash
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function hashHas$1(key) {
+	  var data = this.__data__;
+	  return nativeCreate$1 ? data[key] !== undefined : hasOwnProperty$2.call(data, key);
+	}
+
+	/**
+	 * Sets the hash `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the hash instance.
+	 */
+	function hashSet$1(key, value) {
+	  var data = this.__data__;
+	  data[key] = (nativeCreate$1 && value === undefined) ? HASH_UNDEFINED$1 : value;
+	  return this;
+	}
+
+	// Add methods to `Hash`.
+	Hash$1.prototype.clear = hashClear$1;
+	Hash$1.prototype['delete'] = hashDelete$1;
+	Hash$1.prototype.get = hashGet$1;
+	Hash$1.prototype.has = hashHas$1;
+	Hash$1.prototype.set = hashSet$1;
+
+	/**
+	 * Creates an list cache object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function ListCache$1(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the list cache.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf ListCache
+	 */
+	function listCacheClear$1() {
+	  this.__data__ = [];
+	}
+
+	/**
+	 * Removes `key` and its value from the list cache.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function listCacheDelete$1(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf$1(data, key);
+
+	  if (index < 0) {
+	    return false;
+	  }
+	  var lastIndex = data.length - 1;
+	  if (index == lastIndex) {
+	    data.pop();
+	  } else {
+	    splice$1.call(data, index, 1);
+	  }
+	  return true;
+	}
+
+	/**
+	 * Gets the list cache value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function listCacheGet$1(key) {
+	  var data = this.__data__,
+	      index = assocIndexOf$1(data, key);
+
+	  return index < 0 ? undefined : data[index][1];
+	}
+
+	/**
+	 * Checks if a list cache value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf ListCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function listCacheHas$1(key) {
+	  return assocIndexOf$1(this.__data__, key) > -1;
+	}
+
+	/**
+	 * Sets the list cache `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the list cache instance.
+	 */
+	function listCacheSet$1(key, value) {
+	  var data = this.__data__,
+	      index = assocIndexOf$1(data, key);
+
+	  if (index < 0) {
+	    data.push([key, value]);
+	  } else {
+	    data[index][1] = value;
+	  }
+	  return this;
+	}
+
+	// Add methods to `ListCache`.
+	ListCache$1.prototype.clear = listCacheClear$1;
+	ListCache$1.prototype['delete'] = listCacheDelete$1;
+	ListCache$1.prototype.get = listCacheGet$1;
+	ListCache$1.prototype.has = listCacheHas$1;
+	ListCache$1.prototype.set = listCacheSet$1;
+
+	/**
+	 * Creates a map cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function MapCache$1(entries) {
+	  var index = -1,
+	      length = entries ? entries.length : 0;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	/**
+	 * Removes all key-value entries from the map.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf MapCache
+	 */
+	function mapCacheClear$1() {
+	  this.__data__ = {
+	    'hash': new Hash$1,
+	    'map': new (Map$2 || ListCache$1),
+	    'string': new Hash$1
+	  };
+	}
+
+	/**
+	 * Removes `key` and its value from the map.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function mapCacheDelete$1(key) {
+	  return getMapData$1(this, key)['delete'](key);
+	}
+
+	/**
+	 * Gets the map value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function mapCacheGet$1(key) {
+	  return getMapData$1(this, key).get(key);
+	}
+
+	/**
+	 * Checks if a map value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf MapCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function mapCacheHas$1(key) {
+	  return getMapData$1(this, key).has(key);
+	}
+
+	/**
+	 * Sets the map `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the map cache instance.
+	 */
+	function mapCacheSet$1(key, value) {
+	  getMapData$1(this, key).set(key, value);
+	  return this;
+	}
+
+	// Add methods to `MapCache`.
+	MapCache$1.prototype.clear = mapCacheClear$1;
+	MapCache$1.prototype['delete'] = mapCacheDelete$1;
+	MapCache$1.prototype.get = mapCacheGet$1;
+	MapCache$1.prototype.has = mapCacheHas$1;
+	MapCache$1.prototype.set = mapCacheSet$1;
+
+	/**
+	 * Gets the index at which the `key` is found in `array` of key-value pairs.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} key The key to search for.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function assocIndexOf$1(array, key) {
+	  var length = array.length;
+	  while (length--) {
+	    if (eq$1(array[length][0], key)) {
+	      return length;
+	    }
+	  }
+	  return -1;
+	}
+
+	/**
+	 * The base implementation of `_.isNative` without bad shim checks.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a native function,
+	 *  else `false`.
+	 */
+	function baseIsNative$1(value) {
+	  if (!isObject$1(value) || isMasked$1(value)) {
+	    return false;
+	  }
+	  var pattern = (isFunction$1(value) || isHostObject$1(value)) ? reIsNative$1 : reIsHostCtor$1;
+	  return pattern.test(toSource$1(value));
+	}
+
+	/**
+	 * The base implementation of `_.toString` which doesn't convert nullish
+	 * values to empty strings.
+	 *
+	 * @private
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 */
+	function baseToString$1(value) {
+	  // Exit early for strings to avoid a performance hit in some environments.
+	  if (typeof value == 'string') {
+	    return value;
+	  }
+	  if (isSymbol$1(value)) {
+	    return symbolToString$1 ? symbolToString$1.call(value) : '';
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY$1) ? '-0' : result;
+	}
+
+	/**
+	 * Casts `value` to a path array if it's not one.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {Array} Returns the cast property path array.
+	 */
+	function castPath$1(value) {
+	  return isArray$2(value) ? value : stringToPath$1(value);
+	}
+
+	/**
+	 * Gets the data for `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to query.
+	 * @param {string} key The reference key.
+	 * @returns {*} Returns the map data.
+	 */
+	function getMapData$1(map, key) {
+	  var data = map.__data__;
+	  return isKeyable$1(key)
+	    ? data[typeof key == 'string' ? 'string' : 'hash']
+	    : data.map;
+	}
+
+	/**
+	 * Gets the native function at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {string} key The key of the method to get.
+	 * @returns {*} Returns the function if it's native, else `undefined`.
+	 */
+	function getNative$1(object, key) {
+	  var value = getValue$1(object, key);
+	  return baseIsNative$1(value) ? value : undefined;
+	}
+
+	/**
+	 * Checks if `value` is a property name and not a property path.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {Object} [object] The object to query keys on.
+	 * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
+	 */
+	function isKey$1(value, object) {
+	  if (isArray$2(value)) {
+	    return false;
+	  }
+	  var type = typeof value;
+	  if (type == 'number' || type == 'symbol' || type == 'boolean' ||
+	      value == null || isSymbol$1(value)) {
+	    return true;
+	  }
+	  return reIsPlainProp$1.test(value) || !reIsDeepProp$1.test(value) ||
+	    (object != null && value in Object(object));
+	}
+
+	/**
+	 * Checks if `value` is suitable for use as unique object key.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
+	 */
+	function isKeyable$1(value) {
+	  var type = typeof value;
+	  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
+	    ? (value !== '__proto__')
+	    : (value === null);
+	}
+
+	/**
+	 * Checks if `func` has its source masked.
+	 *
+	 * @private
+	 * @param {Function} func The function to check.
+	 * @returns {boolean} Returns `true` if `func` is masked, else `false`.
+	 */
+	function isMasked$1(func) {
+	  return !!maskSrcKey$1 && (maskSrcKey$1 in func);
+	}
+
+	/**
+	 * Converts `string` to a property path array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the property path array.
+	 */
+	var stringToPath$1 = memoize$2(function(string) {
+	  string = toString$1(string);
+
+	  var result = [];
+	  if (reLeadingDot$1.test(string)) {
+	    result.push('');
+	  }
+	  string.replace(rePropName$1, function(match, number, quote, string) {
+	    result.push(quote ? string.replace(reEscapeChar$1, '$1') : (number || match));
+	  });
+	  return result;
+	});
+
+	/**
+	 * Converts `value` to a string key if it's not a string or symbol.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {string|symbol} Returns the key.
+	 */
+	function toKey$1(value) {
+	  if (typeof value == 'string' || isSymbol$1(value)) {
+	    return value;
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY$1) ? '-0' : result;
+	}
+
+	/**
+	 * Converts `func` to its source code.
+	 *
+	 * @private
+	 * @param {Function} func The function to process.
+	 * @returns {string} Returns the source code.
+	 */
+	function toSource$1(func) {
+	  if (func != null) {
+	    try {
+	      return funcToString$1.call(func);
+	    } catch (e) {}
+	    try {
+	      return (func + '');
+	    } catch (e) {}
+	  }
+	  return '';
+	}
+
+	/**
+	 * Creates a function that memoizes the result of `func`. If `resolver` is
+	 * provided, it determines the cache key for storing the result based on the
+	 * arguments provided to the memoized function. By default, the first argument
+	 * provided to the memoized function is used as the map cache key. The `func`
+	 * is invoked with the `this` binding of the memoized function.
+	 *
+	 * **Note:** The cache is exposed as the `cache` property on the memoized
+	 * function. Its creation may be customized by replacing the `_.memoize.Cache`
+	 * constructor with one whose instances implement the
+	 * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
+	 * method interface of `delete`, `get`, `has`, and `set`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Function
+	 * @param {Function} func The function to have its output memoized.
+	 * @param {Function} [resolver] The function to resolve the cache key.
+	 * @returns {Function} Returns the new memoized function.
+	 * @example
+	 *
+	 * var object = { 'a': 1, 'b': 2 };
+	 * var other = { 'c': 3, 'd': 4 };
+	 *
+	 * var values = _.memoize(_.values);
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * values(other);
+	 * // => [3, 4]
+	 *
+	 * object.a = 2;
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * // Modify the result cache.
+	 * values.cache.set(object, ['a', 'b']);
+	 * values(object);
+	 * // => ['a', 'b']
+	 *
+	 * // Replace `_.memoize.Cache`.
+	 * _.memoize.Cache = WeakMap;
+	 */
+	function memoize$2(func, resolver) {
+	  if (typeof func != 'function' || (resolver && typeof resolver != 'function')) {
+	    throw new TypeError(FUNC_ERROR_TEXT$1);
+	  }
+	  var memoized = function() {
+	    var args = arguments,
+	        key = resolver ? resolver.apply(this, args) : args[0],
+	        cache = memoized.cache;
+
+	    if (cache.has(key)) {
+	      return cache.get(key);
+	    }
+	    var result = func.apply(this, args);
+	    memoized.cache = cache.set(key, result);
+	    return result;
+	  };
+	  memoized.cache = new (memoize$2.Cache || MapCache$1);
+	  return memoized;
+	}
+
+	// Assign cache to `_.memoize`.
+	memoize$2.Cache = MapCache$1;
+
+	/**
+	 * Performs a
+	 * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * comparison between two values to determine if they are equivalent.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to compare.
+	 * @param {*} other The other value to compare.
+	 * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 * var other = { 'a': 1 };
+	 *
+	 * _.eq(object, object);
+	 * // => true
+	 *
+	 * _.eq(object, other);
+	 * // => false
+	 *
+	 * _.eq('a', 'a');
+	 * // => true
+	 *
+	 * _.eq('a', Object('a'));
+	 * // => false
+	 *
+	 * _.eq(NaN, NaN);
+	 * // => true
+	 */
+	function eq$1(value, other) {
+	  return value === other || (value !== value && other !== other);
+	}
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray$2 = Array.isArray;
+
+	/**
+	 * Checks if `value` is classified as a `Function` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+	 * @example
+	 *
+	 * _.isFunction(_);
+	 * // => true
+	 *
+	 * _.isFunction(/abc/);
+	 * // => false
+	 */
+	function isFunction$1(value) {
+	  // The use of `Object#toString` avoids issues with the `typeof` operator
+	  // in Safari 8-9 which returns 'object' for typed array and other constructors.
+	  var tag = isObject$1(value) ? objectToString$2.call(value) : '';
+	  return tag == funcTag$1 || tag == genTag$1;
+	}
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject$1(value) {
+	  var type = typeof value;
+	  return !!value && (type == 'object' || type == 'function');
+	}
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike$2(value) {
+	  return !!value && typeof value == 'object';
+	}
+
+	/**
+	 * Checks if `value` is classified as a `Symbol` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+	 * @example
+	 *
+	 * _.isSymbol(Symbol.iterator);
+	 * // => true
+	 *
+	 * _.isSymbol('abc');
+	 * // => false
+	 */
+	function isSymbol$1(value) {
+	  return typeof value == 'symbol' ||
+	    (isObjectLike$2(value) && objectToString$2.call(value) == symbolTag$1);
+	}
+
+	/**
+	 * Converts `value` to a string. An empty string is returned for `null`
+	 * and `undefined` values. The sign of `-0` is preserved.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 * @example
+	 *
+	 * _.toString(null);
+	 * // => ''
+	 *
+	 * _.toString(-0);
+	 * // => '-0'
+	 *
+	 * _.toString([1, 2, 3]);
+	 * // => '1,2,3'
+	 */
+	function toString$1(value) {
+	  return value == null ? '' : baseToString$1(value);
+	}
+
+	/**
+	 * This method is like `_.get` except that if the resolved value is a
+	 * function it's invoked with the `this` binding of its parent object and
+	 * its result is returned.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @param {Array|string} path The path of the property to resolve.
+	 * @param {*} [defaultValue] The value returned for `undefined` resolved values.
+	 * @returns {*} Returns the resolved value.
+	 * @example
+	 *
+	 * var object = { 'a': [{ 'b': { 'c1': 3, 'c2': _.constant(4) } }] };
+	 *
+	 * _.result(object, 'a[0].b.c1');
+	 * // => 3
+	 *
+	 * _.result(object, 'a[0].b.c2');
+	 * // => 4
+	 *
+	 * _.result(object, 'a[0].b.c3', 'default');
+	 * // => 'default'
+	 *
+	 * _.result(object, 'a[0].b.c3', _.constant('default'));
+	 * // => 'default'
+	 */
+	function result(object, path, defaultValue) {
+	  path = isKey$1(path, object) ? [path] : castPath$1(path);
+
+	  var index = -1,
+	      length = path.length;
+
+	  // Ensure the loop is entered when path is empty.
+	  if (!length) {
+	    object = undefined;
+	    length = 1;
+	  }
+	  while (++index < length) {
+	    var value = object == null ? undefined : object[toKey$1(path[index])];
+	    if (value === undefined) {
+	      index = length;
+	      value = defaultValue;
+	    }
+	    object = isFunction$1(value) ? value.call(object) : value;
+	  }
+	  return object;
+	}
+
+	var lodash_result = result;
+
+	/**
+	 * lodash (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+	 * Released under MIT license <https://lodash.com/license>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 */
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal$2 = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
+
+	/** Detect free variable `self`. */
+	var freeSelf$2 = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root$2 = freeGlobal$2 || freeSelf$2 || Function('return this')();
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeIsFinite = root$2.isFinite;
+
+	/**
+	 * Checks if `value` is a finite primitive number.
+	 *
+	 * **Note:** This method is based on
+	 * [`Number.isFinite`](https://mdn.io/Number/isFinite).
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a finite number,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isFinite(3);
+	 * // => true
+	 *
+	 * _.isFinite(Number.MIN_VALUE);
+	 * // => true
+	 *
+	 * _.isFinite(Infinity);
+	 * // => false
+	 *
+	 * _.isFinite('3');
+	 * // => false
+	 */
+	function isFinite$1(value) {
+	  return typeof value == 'number' && nativeIsFinite(value);
+	}
+
+	var lodash_isfinite = isFinite$1;
+
+	/**
+	 * lodash (Custom Build) <https://lodash.com/>
+	 * Build: `lodash modularize exports="npm" -o ./`
+	 * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+	 * Released under MIT license <https://lodash.com/license>
+	 * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+	 * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+	 */
+
+	/** Used as references for various `Number` constants. */
+	var NAN = 0 / 0;
+
+	/** `Object#toString` result references. */
+	var symbolTag$2 = '[object Symbol]';
+
+	/** Used to match leading and trailing whitespace. */
+	var reTrim = /^\s+|\s+$/g;
+
+	/** Used to detect bad signed hexadecimal string values. */
+	var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+
+	/** Used to detect binary string values. */
+	var reIsBinary = /^0b[01]+$/i;
+
+	/** Used to detect octal string values. */
+	var reIsOctal = /^0o[0-7]+$/i;
+
+	/** Built-in method references without a dependency on `root`. */
+	var freeParseInt = parseInt;
+
+	/** Used for built-in method references. */
+	var objectProto$3 = Object.prototype;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var objectToString$3 = objectProto$3.toString;
+
+	/**
+	 * The base implementation of `_.clamp` which doesn't coerce arguments.
+	 *
+	 * @private
+	 * @param {number} number The number to clamp.
+	 * @param {number} [lower] The lower bound.
+	 * @param {number} upper The upper bound.
+	 * @returns {number} Returns the clamped number.
+	 */
+	function baseClamp(number, lower, upper) {
+	  if (number === number) {
+	    if (upper !== undefined) {
+	      number = number <= upper ? number : upper;
+	    }
+	    if (lower !== undefined) {
+	      number = number >= lower ? number : lower;
+	    }
+	  }
+	  return number;
+	}
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject$2(value) {
+	  var type = typeof value;
+	  return !!value && (type == 'object' || type == 'function');
+	}
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike$3(value) {
+	  return !!value && typeof value == 'object';
+	}
+
+	/**
+	 * Checks if `value` is classified as a `Symbol` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+	 * @example
+	 *
+	 * _.isSymbol(Symbol.iterator);
+	 * // => true
+	 *
+	 * _.isSymbol('abc');
+	 * // => false
+	 */
+	function isSymbol$2(value) {
+	  return typeof value == 'symbol' ||
+	    (isObjectLike$3(value) && objectToString$3.call(value) == symbolTag$2);
+	}
+
+	/**
+	 * Converts `value` to a number.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to process.
+	 * @returns {number} Returns the number.
+	 * @example
+	 *
+	 * _.toNumber(3.2);
+	 * // => 3.2
+	 *
+	 * _.toNumber(Number.MIN_VALUE);
+	 * // => 5e-324
+	 *
+	 * _.toNumber(Infinity);
+	 * // => Infinity
+	 *
+	 * _.toNumber('3.2');
+	 * // => 3.2
+	 */
+	function toNumber(value) {
+	  if (typeof value == 'number') {
+	    return value;
+	  }
+	  if (isSymbol$2(value)) {
+	    return NAN;
+	  }
+	  if (isObject$2(value)) {
+	    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
+	    value = isObject$2(other) ? (other + '') : other;
+	  }
+	  if (typeof value != 'string') {
+	    return value === 0 ? value : +value;
+	  }
+	  value = value.replace(reTrim, '');
+	  var isBinary = reIsBinary.test(value);
+	  return (isBinary || reIsOctal.test(value))
+	    ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
+	    : (reIsBadHex.test(value) ? NAN : +value);
+	}
+
+	/**
+	 * Clamps `number` within the inclusive `lower` and `upper` bounds.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Number
+	 * @param {number} number The number to clamp.
+	 * @param {number} [lower] The lower bound.
+	 * @param {number} upper The upper bound.
+	 * @returns {number} Returns the clamped number.
+	 * @example
+	 *
+	 * _.clamp(-10, -5, 5);
+	 * // => -5
+	 *
+	 * _.clamp(10, -5, 5);
+	 * // => 5
+	 */
+	function clamp$1(number, lower, upper) {
+	  if (upper === undefined) {
+	    upper = lower;
+	    lower = undefined;
+	  }
+	  if (upper !== undefined) {
+	    upper = toNumber(upper);
+	    upper = upper === upper ? upper : 0;
+	  }
+	  if (lower !== undefined) {
+	    lower = toNumber(lower);
+	    lower = lower === lower ? lower : 0;
+	  }
+	  return baseClamp(toNumber(number), lower, upper);
+	}
+
+	var lodash_clamp = clamp$1;
+
+	function _objectWithoutPropertiesLoose(source, excluded) {
+	  if (source == null) { return {}; }
+	  var target = {};
+	  var sourceKeys = Object.keys(source);
+	  var key, i;
+
+	  for (i = 0; i < sourceKeys.length; i++) {
+	    key = sourceKeys[i];
+	    if (excluded.indexOf(key) >= 0) { continue; }
+	    target[key] = source[key];
+	  }
+
+	  return target;
+	}
+
+	var objectWithoutPropertiesLoose = _objectWithoutPropertiesLoose;
+
+	function _objectWithoutProperties(source, excluded) {
+	  if (source == null) { return {}; }
+	  var target = objectWithoutPropertiesLoose(source, excluded);
+	  var key, i;
+
+	  if (Object.getOwnPropertySymbols) {
+	    var sourceSymbolKeys = Object.getOwnPropertySymbols(source);
+
+	    for (i = 0; i < sourceSymbolKeys.length; i++) {
+	      key = sourceSymbolKeys[i];
+	      if (excluded.indexOf(key) >= 0) { continue; }
+	      if (!Object.prototype.propertyIsEnumerable.call(source, key)) { continue; }
+	      target[key] = source[key];
+	    }
+	  }
+
+	  return target;
+	}
+
+	var objectWithoutProperties = _objectWithoutProperties;
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal$3 = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
+
+	var _freeGlobal = freeGlobal$3;
+
+	/** Detect free variable `self`. */
+	var freeSelf$3 = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root$3 = _freeGlobal || freeSelf$3 || Function('return this')();
+
+	var _root = root$3;
+
+	/** Built-in value references. */
+	var Symbol$3 = _root.Symbol;
+
+	var _Symbol = Symbol$3;
+
+	/** Used for built-in method references. */
+	var objectProto$4 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$3 = objectProto$4.hasOwnProperty;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var nativeObjectToString = objectProto$4.toString;
+
+	/** Built-in value references. */
+	var symToStringTag = _Symbol ? _Symbol.toStringTag : undefined;
+
+	/**
+	 * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the raw `toStringTag`.
+	 */
+	function getRawTag(value) {
+	  var isOwn = hasOwnProperty$3.call(value, symToStringTag),
+	      tag = value[symToStringTag];
+
+	  try {
+	    value[symToStringTag] = undefined;
+	    var unmasked = true;
+	  } catch (e) {}
+
+	  var result = nativeObjectToString.call(value);
+	  if (unmasked) {
+	    if (isOwn) {
+	      value[symToStringTag] = tag;
+	    } else {
+	      delete value[symToStringTag];
+	    }
+	  }
+	  return result;
+	}
+
+	var _getRawTag = getRawTag;
+
+	/** Used for built-in method references. */
+	var objectProto$5 = Object.prototype;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var nativeObjectToString$1 = objectProto$5.toString;
+
+	/**
+	 * Converts `value` to a string using `Object.prototype.toString`.
+	 *
+	 * @private
+	 * @param {*} value The value to convert.
+	 * @returns {string} Returns the converted string.
+	 */
+	function objectToString$4(value) {
+	  return nativeObjectToString$1.call(value);
+	}
+
+	var _objectToString = objectToString$4;
+
+	/** `Object#toString` result references. */
+	var nullTag = '[object Null]',
+	    undefinedTag = '[object Undefined]';
+
+	/** Built-in value references. */
+	var symToStringTag$1 = _Symbol ? _Symbol.toStringTag : undefined;
+
+	/**
+	 * The base implementation of `getTag` without fallbacks for buggy environments.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the `toStringTag`.
+	 */
+	function baseGetTag(value) {
+	  if (value == null) {
+	    return value === undefined ? undefinedTag : nullTag;
+	  }
+	  return (symToStringTag$1 && symToStringTag$1 in Object(value))
+	    ? _getRawTag(value)
+	    : _objectToString(value);
+	}
+
+	var _baseGetTag = baseGetTag;
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray$3 = Array.isArray;
+
+	var isArray_1 = isArray$3;
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike$4(value) {
+	  return value != null && typeof value == 'object';
+	}
+
+	var isObjectLike_1 = isObjectLike$4;
+
+	/** `Object#toString` result references. */
+	var stringTag$1 = '[object String]';
+
+	/**
+	 * Checks if `value` is classified as a `String` primitive or object.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a string, else `false`.
+	 * @example
+	 *
+	 * _.isString('abc');
+	 * // => true
+	 *
+	 * _.isString(1);
+	 * // => false
+	 */
+	function isString$1(value) {
+	  return typeof value == 'string' ||
+	    (!isArray_1(value) && isObjectLike_1(value) && _baseGetTag(value) == stringTag$1);
+	}
+
+	var isString_1 = isString$1;
+
+	/**
+	 * Creates a base function for methods like `_.forIn` and `_.forOwn`.
+	 *
+	 * @private
+	 * @param {boolean} [fromRight] Specify iterating from right to left.
+	 * @returns {Function} Returns the new base function.
+	 */
+	function createBaseFor(fromRight) {
+	  return function(object, iteratee, keysFunc) {
+	    var index = -1,
+	        iterable = Object(object),
+	        props = keysFunc(object),
+	        length = props.length;
+
+	    while (length--) {
+	      var key = props[fromRight ? length : ++index];
+	      if (iteratee(iterable[key], key, iterable) === false) {
+	        break;
+	      }
+	    }
+	    return object;
+	  };
+	}
+
+	var _createBaseFor = createBaseFor;
+
+	/**
+	 * The base implementation of `baseForOwn` which iterates over `object`
+	 * properties returned by `keysFunc` and invokes `iteratee` for each property.
+	 * Iteratee functions may exit iteration early by explicitly returning `false`.
+	 *
+	 * @private
+	 * @param {Object} object The object to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @param {Function} keysFunc The function to get the keys of `object`.
+	 * @returns {Object} Returns `object`.
+	 */
+	var baseFor = _createBaseFor();
+
+	var _baseFor = baseFor;
+
+	/**
+	 * The base implementation of `_.times` without support for iteratee shorthands
+	 * or max array length checks.
+	 *
+	 * @private
+	 * @param {number} n The number of times to invoke `iteratee`.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the array of results.
+	 */
+	function baseTimes(n, iteratee) {
+	  var index = -1,
+	      result = Array(n);
+
+	  while (++index < n) {
+	    result[index] = iteratee(index);
+	  }
+	  return result;
+	}
+
+	var _baseTimes = baseTimes;
+
+	/** `Object#toString` result references. */
+	var argsTag = '[object Arguments]';
+
+	/**
+	 * The base implementation of `_.isArguments`.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+	 */
+	function baseIsArguments(value) {
+	  return isObjectLike_1(value) && _baseGetTag(value) == argsTag;
+	}
+
+	var _baseIsArguments = baseIsArguments;
+
+	/** Used for built-in method references. */
+	var objectProto$6 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$4 = objectProto$6.hasOwnProperty;
+
+	/** Built-in value references. */
+	var propertyIsEnumerable = objectProto$6.propertyIsEnumerable;
+
+	/**
+	 * Checks if `value` is likely an `arguments` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isArguments(function() { return arguments; }());
+	 * // => true
+	 *
+	 * _.isArguments([1, 2, 3]);
+	 * // => false
+	 */
+	var isArguments = _baseIsArguments(function() { return arguments; }()) ? _baseIsArguments : function(value) {
+	  return isObjectLike_1(value) && hasOwnProperty$4.call(value, 'callee') &&
+	    !propertyIsEnumerable.call(value, 'callee');
+	};
+
+	var isArguments_1 = isArguments;
+
+	/**
+	 * This method returns `false`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.13.0
+	 * @category Util
+	 * @returns {boolean} Returns `false`.
+	 * @example
+	 *
+	 * _.times(2, _.stubFalse);
+	 * // => [false, false]
+	 */
+	function stubFalse() {
+	  return false;
+	}
+
+	var stubFalse_1 = stubFalse;
+
+	var isBuffer_1 = createCommonjsModule(function (module, exports) {
+	/** Detect free variable `exports`. */
+	var freeExports = exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule = freeExports && 'object' == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports = freeModule && freeModule.exports === freeExports;
+
+	/** Built-in value references. */
+	var Buffer = moduleExports ? _root.Buffer : undefined;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeIsBuffer = Buffer ? Buffer.isBuffer : undefined;
+
+	/**
+	 * Checks if `value` is a buffer.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.3.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a buffer, else `false`.
+	 * @example
+	 *
+	 * _.isBuffer(new Buffer(2));
+	 * // => true
+	 *
+	 * _.isBuffer(new Uint8Array(2));
+	 * // => false
+	 */
+	var isBuffer = nativeIsBuffer || stubFalse_1;
+
+	module.exports = isBuffer;
+	});
+
+	/** Used as references for various `Number` constants. */
+	var MAX_SAFE_INTEGER$1 = 9007199254740991;
+
+	/** Used to detect unsigned integer values. */
+	var reIsUint$1 = /^(?:0|[1-9]\d*)$/;
+
+	/**
+	 * Checks if `value` is a valid array-like index.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
+	 * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
+	 */
+	function isIndex$1(value, length) {
+	  var type = typeof value;
+	  length = length == null ? MAX_SAFE_INTEGER$1 : length;
+
+	  return !!length &&
+	    (type == 'number' ||
+	      (type != 'symbol' && reIsUint$1.test(value))) &&
+	        (value > -1 && value % 1 == 0 && value < length);
+	}
+
+	var _isIndex = isIndex$1;
+
+	/** Used as references for various `Number` constants. */
+	var MAX_SAFE_INTEGER$2 = 9007199254740991;
+
+	/**
+	 * Checks if `value` is a valid array-like length.
+	 *
+	 * **Note:** This method is loosely based on
+	 * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
+	 * @example
+	 *
+	 * _.isLength(3);
+	 * // => true
+	 *
+	 * _.isLength(Number.MIN_VALUE);
+	 * // => false
+	 *
+	 * _.isLength(Infinity);
+	 * // => false
+	 *
+	 * _.isLength('3');
+	 * // => false
+	 */
+	function isLength(value) {
+	  return typeof value == 'number' &&
+	    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER$2;
+	}
+
+	var isLength_1 = isLength;
+
+	/** `Object#toString` result references. */
+	var argsTag$1 = '[object Arguments]',
+	    arrayTag = '[object Array]',
+	    boolTag = '[object Boolean]',
+	    dateTag = '[object Date]',
+	    errorTag = '[object Error]',
+	    funcTag$2 = '[object Function]',
+	    mapTag = '[object Map]',
+	    numberTag = '[object Number]',
+	    objectTag = '[object Object]',
+	    regexpTag = '[object RegExp]',
+	    setTag = '[object Set]',
+	    stringTag$2 = '[object String]',
+	    weakMapTag = '[object WeakMap]';
+
+	var arrayBufferTag = '[object ArrayBuffer]',
+	    dataViewTag = '[object DataView]',
+	    float32Tag = '[object Float32Array]',
+	    float64Tag = '[object Float64Array]',
+	    int8Tag = '[object Int8Array]',
+	    int16Tag = '[object Int16Array]',
+	    int32Tag = '[object Int32Array]',
+	    uint8Tag = '[object Uint8Array]',
+	    uint8ClampedTag = '[object Uint8ClampedArray]',
+	    uint16Tag = '[object Uint16Array]',
+	    uint32Tag = '[object Uint32Array]';
+
+	/** Used to identify `toStringTag` values of typed arrays. */
+	var typedArrayTags = {};
+	typedArrayTags[float32Tag] = typedArrayTags[float64Tag] =
+	typedArrayTags[int8Tag] = typedArrayTags[int16Tag] =
+	typedArrayTags[int32Tag] = typedArrayTags[uint8Tag] =
+	typedArrayTags[uint8ClampedTag] = typedArrayTags[uint16Tag] =
+	typedArrayTags[uint32Tag] = true;
+	typedArrayTags[argsTag$1] = typedArrayTags[arrayTag] =
+	typedArrayTags[arrayBufferTag] = typedArrayTags[boolTag] =
+	typedArrayTags[dataViewTag] = typedArrayTags[dateTag] =
+	typedArrayTags[errorTag] = typedArrayTags[funcTag$2] =
+	typedArrayTags[mapTag] = typedArrayTags[numberTag] =
+	typedArrayTags[objectTag] = typedArrayTags[regexpTag] =
+	typedArrayTags[setTag] = typedArrayTags[stringTag$2] =
+	typedArrayTags[weakMapTag] = false;
+
+	/**
+	 * The base implementation of `_.isTypedArray` without Node.js optimizations.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+	 */
+	function baseIsTypedArray(value) {
+	  return isObjectLike_1(value) &&
+	    isLength_1(value.length) && !!typedArrayTags[_baseGetTag(value)];
+	}
+
+	var _baseIsTypedArray = baseIsTypedArray;
+
+	/**
+	 * The base implementation of `_.unary` without support for storing metadata.
+	 *
+	 * @private
+	 * @param {Function} func The function to cap arguments for.
+	 * @returns {Function} Returns the new capped function.
+	 */
+	function baseUnary(func) {
+	  return function(value) {
+	    return func(value);
+	  };
+	}
+
+	var _baseUnary = baseUnary;
+
+	var _nodeUtil = createCommonjsModule(function (module, exports) {
+	/** Detect free variable `exports`. */
+	var freeExports = exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule = freeExports && 'object' == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports = freeModule && freeModule.exports === freeExports;
+
+	/** Detect free variable `process` from Node.js. */
+	var freeProcess = moduleExports && _freeGlobal.process;
+
+	/** Used to access faster Node.js helpers. */
+	var nodeUtil = (function() {
+	  try {
+	    // Use `util.types` for Node.js 10+.
+	    var types = freeModule && freeModule.require && freeModule.require('util').types;
+
+	    if (types) {
+	      return types;
+	    }
+
+	    // Legacy `process.binding('util')` for Node.js < 10.
+	    return freeProcess && freeProcess.binding && freeProcess.binding('util');
+	  } catch (e) {}
+	}());
+
+	module.exports = nodeUtil;
+	});
+
+	/* Node.js helper references. */
+	var nodeIsTypedArray = _nodeUtil && _nodeUtil.isTypedArray;
+
+	/**
+	 * Checks if `value` is classified as a typed array.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+	 * @example
+	 *
+	 * _.isTypedArray(new Uint8Array);
+	 * // => true
+	 *
+	 * _.isTypedArray([]);
+	 * // => false
+	 */
+	var isTypedArray = nodeIsTypedArray ? _baseUnary(nodeIsTypedArray) : _baseIsTypedArray;
+
+	var isTypedArray_1 = isTypedArray;
+
+	/** Used for built-in method references. */
+	var objectProto$7 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$5 = objectProto$7.hasOwnProperty;
+
+	/**
+	 * Creates an array of the enumerable property names of the array-like `value`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @param {boolean} inherited Specify returning inherited property names.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function arrayLikeKeys(value, inherited) {
+	  var isArr = isArray_1(value),
+	      isArg = !isArr && isArguments_1(value),
+	      isBuff = !isArr && !isArg && isBuffer_1(value),
+	      isType = !isArr && !isArg && !isBuff && isTypedArray_1(value),
+	      skipIndexes = isArr || isArg || isBuff || isType,
+	      result = skipIndexes ? _baseTimes(value.length, String) : [],
+	      length = result.length;
+
+	  for (var key in value) {
+	    if ((inherited || hasOwnProperty$5.call(value, key)) &&
+	        !(skipIndexes && (
+	           // Safari 9 has enumerable `arguments.length` in strict mode.
+	           key == 'length' ||
+	           // Node.js 0.10 has enumerable non-index properties on buffers.
+	           (isBuff && (key == 'offset' || key == 'parent')) ||
+	           // PhantomJS 2 has enumerable non-index properties on typed arrays.
+	           (isType && (key == 'buffer' || key == 'byteLength' || key == 'byteOffset')) ||
+	           // Skip index properties.
+	           _isIndex(key, length)
+	        ))) {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	var _arrayLikeKeys = arrayLikeKeys;
+
+	/** Used for built-in method references. */
+	var objectProto$8 = Object.prototype;
+
+	/**
+	 * Checks if `value` is likely a prototype object.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a prototype, else `false`.
+	 */
+	function isPrototype(value) {
+	  var Ctor = value && value.constructor,
+	      proto = (typeof Ctor == 'function' && Ctor.prototype) || objectProto$8;
+
+	  return value === proto;
+	}
+
+	var _isPrototype = isPrototype;
+
+	/**
+	 * Creates a unary function that invokes `func` with its argument transformed.
+	 *
+	 * @private
+	 * @param {Function} func The function to wrap.
+	 * @param {Function} transform The argument transform.
+	 * @returns {Function} Returns the new function.
+	 */
+	function overArg(func, transform) {
+	  return function(arg) {
+	    return func(transform(arg));
+	  };
+	}
+
+	var _overArg = overArg;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeKeys = _overArg(Object.keys, Object);
+
+	var _nativeKeys = nativeKeys;
+
+	/** Used for built-in method references. */
+	var objectProto$9 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$6 = objectProto$9.hasOwnProperty;
+
+	/**
+	 * The base implementation of `_.keys` which doesn't treat sparse arrays as dense.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function baseKeys(object) {
+	  if (!_isPrototype(object)) {
+	    return _nativeKeys(object);
+	  }
+	  var result = [];
+	  for (var key in Object(object)) {
+	    if (hasOwnProperty$6.call(object, key) && key != 'constructor') {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	var _baseKeys = baseKeys;
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject$3(value) {
+	  var type = typeof value;
+	  return value != null && (type == 'object' || type == 'function');
+	}
+
+	var isObject_1 = isObject$3;
+
+	/** `Object#toString` result references. */
+	var asyncTag = '[object AsyncFunction]',
+	    funcTag$3 = '[object Function]',
+	    genTag$2 = '[object GeneratorFunction]',
+	    proxyTag = '[object Proxy]';
+
+	/**
+	 * Checks if `value` is classified as a `Function` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+	 * @example
+	 *
+	 * _.isFunction(_);
+	 * // => true
+	 *
+	 * _.isFunction(/abc/);
+	 * // => false
+	 */
+	function isFunction$2(value) {
+	  if (!isObject_1(value)) {
+	    return false;
+	  }
+	  // The use of `Object#toString` avoids issues with the `typeof` operator
+	  // in Safari 9 which returns 'object' for typed arrays and other constructors.
+	  var tag = _baseGetTag(value);
+	  return tag == funcTag$3 || tag == genTag$2 || tag == asyncTag || tag == proxyTag;
+	}
+
+	var isFunction_1 = isFunction$2;
+
+	/**
+	 * Checks if `value` is array-like. A value is considered array-like if it's
+	 * not a function and has a `value.length` that's an integer greater than or
+	 * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
+	 * @example
+	 *
+	 * _.isArrayLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArrayLike(document.body.children);
+	 * // => true
+	 *
+	 * _.isArrayLike('abc');
+	 * // => true
+	 *
+	 * _.isArrayLike(_.noop);
+	 * // => false
+	 */
+	function isArrayLike(value) {
+	  return value != null && isLength_1(value.length) && !isFunction_1(value);
+	}
+
+	var isArrayLike_1 = isArrayLike;
+
+	/**
+	 * Creates an array of the own enumerable property names of `object`.
+	 *
+	 * **Note:** Non-object values are coerced to objects. See the
+	 * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+	 * for more details.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.keys(new Foo);
+	 * // => ['a', 'b'] (iteration order is not guaranteed)
+	 *
+	 * _.keys('hi');
+	 * // => ['0', '1']
+	 */
+	function keys(object) {
+	  return isArrayLike_1(object) ? _arrayLikeKeys(object) : _baseKeys(object);
+	}
+
+	var keys_1 = keys;
+
+	/**
+	 * The base implementation of `_.forOwn` without support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Object} object The object to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseForOwn(object, iteratee) {
+	  return object && _baseFor(object, iteratee, keys_1);
+	}
+
+	var _baseForOwn = baseForOwn;
+
+	/**
+	 * This method returns the first argument it receives.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Util
+	 * @param {*} value Any value.
+	 * @returns {*} Returns `value`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 *
+	 * console.log(_.identity(object) === object);
+	 * // => true
+	 */
+	function identity(value) {
+	  return value;
+	}
+
+	var identity_1 = identity;
+
+	/**
+	 * Casts `value` to `identity` if it's not a function.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {Function} Returns cast function.
+	 */
+	function castFunction(value) {
+	  return typeof value == 'function' ? value : identity_1;
+	}
+
+	var _castFunction = castFunction;
+
+	/**
+	 * Iterates over own enumerable string keyed properties of an object and
+	 * invokes `iteratee` for each property. The iteratee is invoked with three
+	 * arguments: (value, key, object). Iteratee functions may exit iteration
+	 * early by explicitly returning `false`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.3.0
+	 * @category Object
+	 * @param {Object} object The object to iterate over.
+	 * @param {Function} [iteratee=_.identity] The function invoked per iteration.
+	 * @returns {Object} Returns `object`.
+	 * @see _.forOwnRight
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.forOwn(new Foo, function(value, key) {
+	 *   console.log(key);
+	 * });
+	 * // => Logs 'a' then 'b' (iteration order is not guaranteed).
+	 */
+	function forOwn$3(object, iteratee) {
+	  return object && _baseForOwn(object, _castFunction(iteratee));
+	}
+
+	var forOwn_1 = forOwn$3;
+
+	/** Built-in value references. */
+	var getPrototype = _overArg(Object.getPrototypeOf, Object);
+
+	var _getPrototype = getPrototype;
+
+	/** `Object#toString` result references. */
+	var objectTag$1 = '[object Object]';
+
+	/** Used for built-in method references. */
+	var funcProto$2 = Function.prototype,
+	    objectProto$a = Object.prototype;
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString$2 = funcProto$2.toString;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$7 = objectProto$a.hasOwnProperty;
+
+	/** Used to infer the `Object` constructor. */
+	var objectCtorString = funcToString$2.call(Object);
+
+	/**
+	 * Checks if `value` is a plain object, that is, an object created by the
+	 * `Object` constructor or one with a `[[Prototype]]` of `null`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.8.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a plain object, else `false`.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 * }
+	 *
+	 * _.isPlainObject(new Foo);
+	 * // => false
+	 *
+	 * _.isPlainObject([1, 2, 3]);
+	 * // => false
+	 *
+	 * _.isPlainObject({ 'x': 0, 'y': 0 });
+	 * // => true
+	 *
+	 * _.isPlainObject(Object.create(null));
+	 * // => true
+	 */
+	function isPlainObject(value) {
+	  if (!isObjectLike_1(value) || _baseGetTag(value) != objectTag$1) {
+	    return false;
+	  }
+	  var proto = _getPrototype(value);
+	  if (proto === null) {
+	    return true;
+	  }
+	  var Ctor = hasOwnProperty$7.call(proto, 'constructor') && proto.constructor;
+	  return typeof Ctor == 'function' && Ctor instanceof Ctor &&
+	    funcToString$2.call(Ctor) == objectCtorString;
+	}
+
+	var isPlainObject_1 = isPlainObject;
+
+	/**
+	 * A specialized version of `_.map` for arrays without support for iteratee
+	 * shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the new mapped array.
+	 */
+	function arrayMap(array, iteratee) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length,
+	      result = Array(length);
+
+	  while (++index < length) {
+	    result[index] = iteratee(array[index], index, array);
+	  }
+	  return result;
+	}
+
+	var _arrayMap = arrayMap;
+
+	/**
+	 * Removes all key-value entries from the list cache.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf ListCache
+	 */
+	function listCacheClear$2() {
+	  this.__data__ = [];
+	  this.size = 0;
+	}
+
+	var _listCacheClear = listCacheClear$2;
+
+	/**
+	 * Performs a
+	 * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * comparison between two values to determine if they are equivalent.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to compare.
+	 * @param {*} other The other value to compare.
+	 * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 * var other = { 'a': 1 };
+	 *
+	 * _.eq(object, object);
+	 * // => true
+	 *
+	 * _.eq(object, other);
+	 * // => false
+	 *
+	 * _.eq('a', 'a');
+	 * // => true
+	 *
+	 * _.eq('a', Object('a'));
+	 * // => false
+	 *
+	 * _.eq(NaN, NaN);
+	 * // => true
+	 */
+	function eq$2(value, other) {
+	  return value === other || (value !== value && other !== other);
+	}
+
+	var eq_1 = eq$2;
+
+	/**
+	 * Gets the index at which the `key` is found in `array` of key-value pairs.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} key The key to search for.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function assocIndexOf$2(array, key) {
+	  var length = array.length;
+	  while (length--) {
+	    if (eq_1(array[length][0], key)) {
+	      return length;
+	    }
+	  }
+	  return -1;
+	}
+
+	var _assocIndexOf = assocIndexOf$2;
+
+	/** Used for built-in method references. */
+	var arrayProto$2 = Array.prototype;
+
+	/** Built-in value references. */
+	var splice$2 = arrayProto$2.splice;
+
+	/**
+	 * Removes `key` and its value from the list cache.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function listCacheDelete$2(key) {
+	  var data = this.__data__,
+	      index = _assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    return false;
+	  }
+	  var lastIndex = data.length - 1;
+	  if (index == lastIndex) {
+	    data.pop();
+	  } else {
+	    splice$2.call(data, index, 1);
+	  }
+	  --this.size;
+	  return true;
+	}
+
+	var _listCacheDelete = listCacheDelete$2;
+
+	/**
+	 * Gets the list cache value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function listCacheGet$2(key) {
+	  var data = this.__data__,
+	      index = _assocIndexOf(data, key);
+
+	  return index < 0 ? undefined : data[index][1];
+	}
+
+	var _listCacheGet = listCacheGet$2;
+
+	/**
+	 * Checks if a list cache value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf ListCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function listCacheHas$2(key) {
+	  return _assocIndexOf(this.__data__, key) > -1;
+	}
+
+	var _listCacheHas = listCacheHas$2;
+
+	/**
+	 * Sets the list cache `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf ListCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the list cache instance.
+	 */
+	function listCacheSet$2(key, value) {
+	  var data = this.__data__,
+	      index = _assocIndexOf(data, key);
+
+	  if (index < 0) {
+	    ++this.size;
+	    data.push([key, value]);
+	  } else {
+	    data[index][1] = value;
+	  }
+	  return this;
+	}
+
+	var _listCacheSet = listCacheSet$2;
+
+	/**
+	 * Creates an list cache object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function ListCache$2(entries) {
+	  var index = -1,
+	      length = entries == null ? 0 : entries.length;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	// Add methods to `ListCache`.
+	ListCache$2.prototype.clear = _listCacheClear;
+	ListCache$2.prototype['delete'] = _listCacheDelete;
+	ListCache$2.prototype.get = _listCacheGet;
+	ListCache$2.prototype.has = _listCacheHas;
+	ListCache$2.prototype.set = _listCacheSet;
+
+	var _ListCache = ListCache$2;
+
+	/**
+	 * Removes all key-value entries from the stack.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Stack
+	 */
+	function stackClear() {
+	  this.__data__ = new _ListCache;
+	  this.size = 0;
+	}
+
+	var _stackClear = stackClear;
+
+	/**
+	 * Removes `key` and its value from the stack.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function stackDelete(key) {
+	  var data = this.__data__,
+	      result = data['delete'](key);
+
+	  this.size = data.size;
+	  return result;
+	}
+
+	var _stackDelete = stackDelete;
+
+	/**
+	 * Gets the stack value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function stackGet(key) {
+	  return this.__data__.get(key);
+	}
+
+	var _stackGet = stackGet;
+
+	/**
+	 * Checks if a stack value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Stack
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function stackHas(key) {
+	  return this.__data__.has(key);
+	}
+
+	var _stackHas = stackHas;
+
+	/** Used to detect overreaching core-js shims. */
+	var coreJsData$2 = _root['__core-js_shared__'];
+
+	var _coreJsData = coreJsData$2;
+
+	/** Used to detect methods masquerading as native. */
+	var maskSrcKey$2 = (function() {
+	  var uid = /[^.]+$/.exec(_coreJsData && _coreJsData.keys && _coreJsData.keys.IE_PROTO || '');
+	  return uid ? ('Symbol(src)_1.' + uid) : '';
+	}());
+
+	/**
+	 * Checks if `func` has its source masked.
+	 *
+	 * @private
+	 * @param {Function} func The function to check.
+	 * @returns {boolean} Returns `true` if `func` is masked, else `false`.
+	 */
+	function isMasked$2(func) {
+	  return !!maskSrcKey$2 && (maskSrcKey$2 in func);
+	}
+
+	var _isMasked = isMasked$2;
+
+	/** Used for built-in method references. */
+	var funcProto$3 = Function.prototype;
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString$3 = funcProto$3.toString;
+
+	/**
+	 * Converts `func` to its source code.
+	 *
+	 * @private
+	 * @param {Function} func The function to convert.
+	 * @returns {string} Returns the source code.
+	 */
+	function toSource$2(func) {
+	  if (func != null) {
+	    try {
+	      return funcToString$3.call(func);
+	    } catch (e) {}
+	    try {
+	      return (func + '');
+	    } catch (e) {}
+	  }
+	  return '';
+	}
+
+	var _toSource = toSource$2;
+
+	/**
+	 * Used to match `RegExp`
+	 * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
+	 */
+	var reRegExpChar$2 = /[\\^$.*+?()[\]{}|]/g;
+
+	/** Used to detect host constructors (Safari). */
+	var reIsHostCtor$2 = /^\[object .+?Constructor\]$/;
+
+	/** Used for built-in method references. */
+	var funcProto$4 = Function.prototype,
+	    objectProto$b = Object.prototype;
+
+	/** Used to resolve the decompiled source of functions. */
+	var funcToString$4 = funcProto$4.toString;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$8 = objectProto$b.hasOwnProperty;
+
+	/** Used to detect if a method is native. */
+	var reIsNative$2 = RegExp('^' +
+	  funcToString$4.call(hasOwnProperty$8).replace(reRegExpChar$2, '\\$&')
+	  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
+	);
+
+	/**
+	 * The base implementation of `_.isNative` without bad shim checks.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a native function,
+	 *  else `false`.
+	 */
+	function baseIsNative$2(value) {
+	  if (!isObject_1(value) || _isMasked(value)) {
+	    return false;
+	  }
+	  var pattern = isFunction_1(value) ? reIsNative$2 : reIsHostCtor$2;
+	  return pattern.test(_toSource(value));
+	}
+
+	var _baseIsNative = baseIsNative$2;
+
+	/**
+	 * Gets the value at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} [object] The object to query.
+	 * @param {string} key The key of the property to get.
+	 * @returns {*} Returns the property value.
+	 */
+	function getValue$2(object, key) {
+	  return object == null ? undefined : object[key];
+	}
+
+	var _getValue = getValue$2;
+
+	/**
+	 * Gets the native function at `key` of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {string} key The key of the method to get.
+	 * @returns {*} Returns the function if it's native, else `undefined`.
+	 */
+	function getNative$2(object, key) {
+	  var value = _getValue(object, key);
+	  return _baseIsNative(value) ? value : undefined;
+	}
+
+	var _getNative = getNative$2;
+
+	/* Built-in method references that are verified to be native. */
+	var Map$3 = _getNative(_root, 'Map');
+
+	var _Map = Map$3;
+
+	/* Built-in method references that are verified to be native. */
+	var nativeCreate$2 = _getNative(Object, 'create');
+
+	var _nativeCreate = nativeCreate$2;
+
+	/**
+	 * Removes all key-value entries from the hash.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf Hash
+	 */
+	function hashClear$2() {
+	  this.__data__ = _nativeCreate ? _nativeCreate(null) : {};
+	  this.size = 0;
+	}
+
+	var _hashClear = hashClear$2;
+
+	/**
+	 * Removes `key` and its value from the hash.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf Hash
+	 * @param {Object} hash The hash to modify.
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function hashDelete$2(key) {
+	  var result = this.has(key) && delete this.__data__[key];
+	  this.size -= result ? 1 : 0;
+	  return result;
+	}
+
+	var _hashDelete = hashDelete$2;
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED$2 = '__lodash_hash_undefined__';
+
+	/** Used for built-in method references. */
+	var objectProto$c = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$9 = objectProto$c.hasOwnProperty;
+
+	/**
+	 * Gets the hash value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function hashGet$2(key) {
+	  var data = this.__data__;
+	  if (_nativeCreate) {
+	    var result = data[key];
+	    return result === HASH_UNDEFINED$2 ? undefined : result;
+	  }
+	  return hasOwnProperty$9.call(data, key) ? data[key] : undefined;
+	}
+
+	var _hashGet = hashGet$2;
+
+	/** Used for built-in method references. */
+	var objectProto$d = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$a = objectProto$d.hasOwnProperty;
+
+	/**
+	 * Checks if a hash value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf Hash
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function hashHas$2(key) {
+	  var data = this.__data__;
+	  return _nativeCreate ? (data[key] !== undefined) : hasOwnProperty$a.call(data, key);
+	}
+
+	var _hashHas = hashHas$2;
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED$3 = '__lodash_hash_undefined__';
+
+	/**
+	 * Sets the hash `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Hash
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the hash instance.
+	 */
+	function hashSet$2(key, value) {
+	  var data = this.__data__;
+	  this.size += this.has(key) ? 0 : 1;
+	  data[key] = (_nativeCreate && value === undefined) ? HASH_UNDEFINED$3 : value;
+	  return this;
+	}
+
+	var _hashSet = hashSet$2;
+
+	/**
+	 * Creates a hash object.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Hash$2(entries) {
+	  var index = -1,
+	      length = entries == null ? 0 : entries.length;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	// Add methods to `Hash`.
+	Hash$2.prototype.clear = _hashClear;
+	Hash$2.prototype['delete'] = _hashDelete;
+	Hash$2.prototype.get = _hashGet;
+	Hash$2.prototype.has = _hashHas;
+	Hash$2.prototype.set = _hashSet;
+
+	var _Hash = Hash$2;
+
+	/**
+	 * Removes all key-value entries from the map.
+	 *
+	 * @private
+	 * @name clear
+	 * @memberOf MapCache
+	 */
+	function mapCacheClear$2() {
+	  this.size = 0;
+	  this.__data__ = {
+	    'hash': new _Hash,
+	    'map': new (_Map || _ListCache),
+	    'string': new _Hash
+	  };
+	}
+
+	var _mapCacheClear = mapCacheClear$2;
+
+	/**
+	 * Checks if `value` is suitable for use as unique object key.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
+	 */
+	function isKeyable$2(value) {
+	  var type = typeof value;
+	  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
+	    ? (value !== '__proto__')
+	    : (value === null);
+	}
+
+	var _isKeyable = isKeyable$2;
+
+	/**
+	 * Gets the data for `map`.
+	 *
+	 * @private
+	 * @param {Object} map The map to query.
+	 * @param {string} key The reference key.
+	 * @returns {*} Returns the map data.
+	 */
+	function getMapData$2(map, key) {
+	  var data = map.__data__;
+	  return _isKeyable(key)
+	    ? data[typeof key == 'string' ? 'string' : 'hash']
+	    : data.map;
+	}
+
+	var _getMapData = getMapData$2;
+
+	/**
+	 * Removes `key` and its value from the map.
+	 *
+	 * @private
+	 * @name delete
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to remove.
+	 * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+	 */
+	function mapCacheDelete$2(key) {
+	  var result = _getMapData(this, key)['delete'](key);
+	  this.size -= result ? 1 : 0;
+	  return result;
+	}
+
+	var _mapCacheDelete = mapCacheDelete$2;
+
+	/**
+	 * Gets the map value for `key`.
+	 *
+	 * @private
+	 * @name get
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to get.
+	 * @returns {*} Returns the entry value.
+	 */
+	function mapCacheGet$2(key) {
+	  return _getMapData(this, key).get(key);
+	}
+
+	var _mapCacheGet = mapCacheGet$2;
+
+	/**
+	 * Checks if a map value for `key` exists.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf MapCache
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function mapCacheHas$2(key) {
+	  return _getMapData(this, key).has(key);
+	}
+
+	var _mapCacheHas = mapCacheHas$2;
+
+	/**
+	 * Sets the map `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf MapCache
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the map cache instance.
+	 */
+	function mapCacheSet$2(key, value) {
+	  var data = _getMapData(this, key),
+	      size = data.size;
+
+	  data.set(key, value);
+	  this.size += data.size == size ? 0 : 1;
+	  return this;
+	}
+
+	var _mapCacheSet = mapCacheSet$2;
+
+	/**
+	 * Creates a map cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function MapCache$2(entries) {
+	  var index = -1,
+	      length = entries == null ? 0 : entries.length;
+
+	  this.clear();
+	  while (++index < length) {
+	    var entry = entries[index];
+	    this.set(entry[0], entry[1]);
+	  }
+	}
+
+	// Add methods to `MapCache`.
+	MapCache$2.prototype.clear = _mapCacheClear;
+	MapCache$2.prototype['delete'] = _mapCacheDelete;
+	MapCache$2.prototype.get = _mapCacheGet;
+	MapCache$2.prototype.has = _mapCacheHas;
+	MapCache$2.prototype.set = _mapCacheSet;
+
+	var _MapCache = MapCache$2;
+
+	/** Used as the size to enable large array optimizations. */
+	var LARGE_ARRAY_SIZE = 200;
+
+	/**
+	 * Sets the stack `key` to `value`.
+	 *
+	 * @private
+	 * @name set
+	 * @memberOf Stack
+	 * @param {string} key The key of the value to set.
+	 * @param {*} value The value to set.
+	 * @returns {Object} Returns the stack cache instance.
+	 */
+	function stackSet(key, value) {
+	  var data = this.__data__;
+	  if (data instanceof _ListCache) {
+	    var pairs = data.__data__;
+	    if (!_Map || (pairs.length < LARGE_ARRAY_SIZE - 1)) {
+	      pairs.push([key, value]);
+	      this.size = ++data.size;
+	      return this;
+	    }
+	    data = this.__data__ = new _MapCache(pairs);
+	  }
+	  data.set(key, value);
+	  this.size = data.size;
+	  return this;
+	}
+
+	var _stackSet = stackSet;
+
+	/**
+	 * Creates a stack cache object to store key-value pairs.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [entries] The key-value pairs to cache.
+	 */
+	function Stack(entries) {
+	  var data = this.__data__ = new _ListCache(entries);
+	  this.size = data.size;
+	}
+
+	// Add methods to `Stack`.
+	Stack.prototype.clear = _stackClear;
+	Stack.prototype['delete'] = _stackDelete;
+	Stack.prototype.get = _stackGet;
+	Stack.prototype.has = _stackHas;
+	Stack.prototype.set = _stackSet;
+
+	var _Stack = Stack;
+
+	/** Used to stand-in for `undefined` hash values. */
+	var HASH_UNDEFINED$4 = '__lodash_hash_undefined__';
+
+	/**
+	 * Adds `value` to the array cache.
+	 *
+	 * @private
+	 * @name add
+	 * @memberOf SetCache
+	 * @alias push
+	 * @param {*} value The value to cache.
+	 * @returns {Object} Returns the cache instance.
+	 */
+	function setCacheAdd(value) {
+	  this.__data__.set(value, HASH_UNDEFINED$4);
+	  return this;
+	}
+
+	var _setCacheAdd = setCacheAdd;
+
+	/**
+	 * Checks if `value` is in the array cache.
+	 *
+	 * @private
+	 * @name has
+	 * @memberOf SetCache
+	 * @param {*} value The value to search for.
+	 * @returns {number} Returns `true` if `value` is found, else `false`.
+	 */
+	function setCacheHas(value) {
+	  return this.__data__.has(value);
+	}
+
+	var _setCacheHas = setCacheHas;
+
+	/**
+	 *
+	 * Creates an array cache object to store unique values.
+	 *
+	 * @private
+	 * @constructor
+	 * @param {Array} [values] The values to cache.
+	 */
+	function SetCache(values) {
+	  var index = -1,
+	      length = values == null ? 0 : values.length;
+
+	  this.__data__ = new _MapCache;
+	  while (++index < length) {
+	    this.add(values[index]);
+	  }
+	}
+
+	// Add methods to `SetCache`.
+	SetCache.prototype.add = SetCache.prototype.push = _setCacheAdd;
+	SetCache.prototype.has = _setCacheHas;
+
+	var _SetCache = SetCache;
+
+	/**
+	 * A specialized version of `_.some` for arrays without support for iteratee
+	 * shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} predicate The function invoked per iteration.
+	 * @returns {boolean} Returns `true` if any element passes the predicate check,
+	 *  else `false`.
+	 */
+	function arraySome(array, predicate) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length;
+
+	  while (++index < length) {
+	    if (predicate(array[index], index, array)) {
+	      return true;
+	    }
+	  }
+	  return false;
+	}
+
+	var _arraySome = arraySome;
+
+	/**
+	 * Checks if a `cache` value for `key` exists.
+	 *
+	 * @private
+	 * @param {Object} cache The cache to query.
+	 * @param {string} key The key of the entry to check.
+	 * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+	 */
+	function cacheHas(cache, key) {
+	  return cache.has(key);
+	}
+
+	var _cacheHas = cacheHas;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG = 1,
+	    COMPARE_UNORDERED_FLAG = 2;
+
+	/**
+	 * A specialized version of `baseIsEqualDeep` for arrays with support for
+	 * partial deep comparisons.
+	 *
+	 * @private
+	 * @param {Array} array The array to compare.
+	 * @param {Array} other The other array to compare.
+	 * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+	 * @param {Function} customizer The function to customize comparisons.
+	 * @param {Function} equalFunc The function to determine equivalents of values.
+	 * @param {Object} stack Tracks traversed `array` and `other` objects.
+	 * @returns {boolean} Returns `true` if the arrays are equivalent, else `false`.
+	 */
+	function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
+	  var isPartial = bitmask & COMPARE_PARTIAL_FLAG,
+	      arrLength = array.length,
+	      othLength = other.length;
+
+	  if (arrLength != othLength && !(isPartial && othLength > arrLength)) {
+	    return false;
+	  }
+	  // Check that cyclic values are equal.
+	  var arrStacked = stack.get(array);
+	  var othStacked = stack.get(other);
+	  if (arrStacked && othStacked) {
+	    return arrStacked == other && othStacked == array;
+	  }
+	  var index = -1,
+	      result = true,
+	      seen = (bitmask & COMPARE_UNORDERED_FLAG) ? new _SetCache : undefined;
+
+	  stack.set(array, other);
+	  stack.set(other, array);
+
+	  // Ignore non-index properties.
+	  while (++index < arrLength) {
+	    var arrValue = array[index],
+	        othValue = other[index];
+
+	    if (customizer) {
+	      var compared = isPartial
+	        ? customizer(othValue, arrValue, index, other, array, stack)
+	        : customizer(arrValue, othValue, index, array, other, stack);
+	    }
+	    if (compared !== undefined) {
+	      if (compared) {
+	        continue;
+	      }
+	      result = false;
+	      break;
+	    }
+	    // Recursively compare arrays (susceptible to call stack limits).
+	    if (seen) {
+	      if (!_arraySome(other, function(othValue, othIndex) {
+	            if (!_cacheHas(seen, othIndex) &&
+	                (arrValue === othValue || equalFunc(arrValue, othValue, bitmask, customizer, stack))) {
+	              return seen.push(othIndex);
+	            }
+	          })) {
+	        result = false;
+	        break;
+	      }
+	    } else if (!(
+	          arrValue === othValue ||
+	            equalFunc(arrValue, othValue, bitmask, customizer, stack)
+	        )) {
+	      result = false;
+	      break;
+	    }
+	  }
+	  stack['delete'](array);
+	  stack['delete'](other);
+	  return result;
+	}
+
+	var _equalArrays = equalArrays;
+
+	/** Built-in value references. */
+	var Uint8Array$1 = _root.Uint8Array;
+
+	var _Uint8Array = Uint8Array$1;
+
+	/**
+	 * Converts `map` to its key-value pairs.
+	 *
+	 * @private
+	 * @param {Object} map The map to convert.
+	 * @returns {Array} Returns the key-value pairs.
+	 */
+	function mapToArray(map) {
+	  var index = -1,
+	      result = Array(map.size);
+
+	  map.forEach(function(value, key) {
+	    result[++index] = [key, value];
+	  });
+	  return result;
+	}
+
+	var _mapToArray = mapToArray;
+
+	/**
+	 * Converts `set` to an array of its values.
+	 *
+	 * @private
+	 * @param {Object} set The set to convert.
+	 * @returns {Array} Returns the values.
+	 */
+	function setToArray(set) {
+	  var index = -1,
+	      result = Array(set.size);
+
+	  set.forEach(function(value) {
+	    result[++index] = value;
+	  });
+	  return result;
+	}
+
+	var _setToArray = setToArray;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG$1 = 1,
+	    COMPARE_UNORDERED_FLAG$1 = 2;
+
+	/** `Object#toString` result references. */
+	var boolTag$1 = '[object Boolean]',
+	    dateTag$1 = '[object Date]',
+	    errorTag$1 = '[object Error]',
+	    mapTag$1 = '[object Map]',
+	    numberTag$1 = '[object Number]',
+	    regexpTag$1 = '[object RegExp]',
+	    setTag$1 = '[object Set]',
+	    stringTag$3 = '[object String]',
+	    symbolTag$3 = '[object Symbol]';
+
+	var arrayBufferTag$1 = '[object ArrayBuffer]',
+	    dataViewTag$1 = '[object DataView]';
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto$2 = _Symbol ? _Symbol.prototype : undefined,
+	    symbolValueOf = symbolProto$2 ? symbolProto$2.valueOf : undefined;
+
+	/**
+	 * A specialized version of `baseIsEqualDeep` for comparing objects of
+	 * the same `toStringTag`.
+	 *
+	 * **Note:** This function only supports comparing values with tags of
+	 * `Boolean`, `Date`, `Error`, `Number`, `RegExp`, or `String`.
+	 *
+	 * @private
+	 * @param {Object} object The object to compare.
+	 * @param {Object} other The other object to compare.
+	 * @param {string} tag The `toStringTag` of the objects to compare.
+	 * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+	 * @param {Function} customizer The function to customize comparisons.
+	 * @param {Function} equalFunc The function to determine equivalents of values.
+	 * @param {Object} stack Tracks traversed `object` and `other` objects.
+	 * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+	 */
+	function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
+	  switch (tag) {
+	    case dataViewTag$1:
+	      if ((object.byteLength != other.byteLength) ||
+	          (object.byteOffset != other.byteOffset)) {
+	        return false;
+	      }
+	      object = object.buffer;
+	      other = other.buffer;
+
+	    case arrayBufferTag$1:
+	      if ((object.byteLength != other.byteLength) ||
+	          !equalFunc(new _Uint8Array(object), new _Uint8Array(other))) {
+	        return false;
+	      }
+	      return true;
+
+	    case boolTag$1:
+	    case dateTag$1:
+	    case numberTag$1:
+	      // Coerce booleans to `1` or `0` and dates to milliseconds.
+	      // Invalid dates are coerced to `NaN`.
+	      return eq_1(+object, +other);
+
+	    case errorTag$1:
+	      return object.name == other.name && object.message == other.message;
+
+	    case regexpTag$1:
+	    case stringTag$3:
+	      // Coerce regexes to strings and treat strings, primitives and objects,
+	      // as equal. See http://www.ecma-international.org/ecma-262/7.0/#sec-regexp.prototype.tostring
+	      // for more details.
+	      return object == (other + '');
+
+	    case mapTag$1:
+	      var convert = _mapToArray;
+
+	    case setTag$1:
+	      var isPartial = bitmask & COMPARE_PARTIAL_FLAG$1;
+	      convert || (convert = _setToArray);
+
+	      if (object.size != other.size && !isPartial) {
+	        return false;
+	      }
+	      // Assume cyclic values are equal.
+	      var stacked = stack.get(object);
+	      if (stacked) {
+	        return stacked == other;
+	      }
+	      bitmask |= COMPARE_UNORDERED_FLAG$1;
+
+	      // Recursively compare objects (susceptible to call stack limits).
+	      stack.set(object, other);
+	      var result = _equalArrays(convert(object), convert(other), bitmask, customizer, equalFunc, stack);
+	      stack['delete'](object);
+	      return result;
+
+	    case symbolTag$3:
+	      if (symbolValueOf) {
+	        return symbolValueOf.call(object) == symbolValueOf.call(other);
+	      }
+	  }
+	  return false;
+	}
+
+	var _equalByTag = equalByTag;
+
+	/**
+	 * Appends the elements of `values` to `array`.
+	 *
+	 * @private
+	 * @param {Array} array The array to modify.
+	 * @param {Array} values The values to append.
+	 * @returns {Array} Returns `array`.
+	 */
+	function arrayPush(array, values) {
+	  var index = -1,
+	      length = values.length,
+	      offset = array.length;
+
+	  while (++index < length) {
+	    array[offset + index] = values[index];
+	  }
+	  return array;
+	}
+
+	var _arrayPush = arrayPush;
+
+	/**
+	 * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
+	 * `keysFunc` and `symbolsFunc` to get the enumerable property names and
+	 * symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {Function} keysFunc The function to get the keys of `object`.
+	 * @param {Function} symbolsFunc The function to get the symbols of `object`.
+	 * @returns {Array} Returns the array of property names and symbols.
+	 */
+	function baseGetAllKeys(object, keysFunc, symbolsFunc) {
+	  var result = keysFunc(object);
+	  return isArray_1(object) ? result : _arrayPush(result, symbolsFunc(object));
+	}
+
+	var _baseGetAllKeys = baseGetAllKeys;
+
+	/**
+	 * A specialized version of `_.filter` for arrays without support for
+	 * iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} predicate The function invoked per iteration.
+	 * @returns {Array} Returns the new filtered array.
+	 */
+	function arrayFilter(array, predicate) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length,
+	      resIndex = 0,
+	      result = [];
+
+	  while (++index < length) {
+	    var value = array[index];
+	    if (predicate(value, index, array)) {
+	      result[resIndex++] = value;
+	    }
+	  }
+	  return result;
+	}
+
+	var _arrayFilter = arrayFilter;
+
+	/**
+	 * This method returns a new empty array.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.13.0
+	 * @category Util
+	 * @returns {Array} Returns the new empty array.
+	 * @example
+	 *
+	 * var arrays = _.times(2, _.stubArray);
+	 *
+	 * console.log(arrays);
+	 * // => [[], []]
+	 *
+	 * console.log(arrays[0] === arrays[1]);
+	 * // => false
+	 */
+	function stubArray() {
+	  return [];
+	}
+
+	var stubArray_1 = stubArray;
+
+	/** Used for built-in method references. */
+	var objectProto$e = Object.prototype;
+
+	/** Built-in value references. */
+	var propertyIsEnumerable$1 = objectProto$e.propertyIsEnumerable;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeGetSymbols = Object.getOwnPropertySymbols;
+
+	/**
+	 * Creates an array of the own enumerable symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of symbols.
+	 */
+	var getSymbols = !nativeGetSymbols ? stubArray_1 : function(object) {
+	  if (object == null) {
+	    return [];
+	  }
+	  object = Object(object);
+	  return _arrayFilter(nativeGetSymbols(object), function(symbol) {
+	    return propertyIsEnumerable$1.call(object, symbol);
+	  });
+	};
+
+	var _getSymbols = getSymbols;
+
+	/**
+	 * Creates an array of own enumerable property names and symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names and symbols.
+	 */
+	function getAllKeys(object) {
+	  return _baseGetAllKeys(object, keys_1, _getSymbols);
+	}
+
+	var _getAllKeys = getAllKeys;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG$2 = 1;
+
+	/** Used for built-in method references. */
+	var objectProto$f = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$b = objectProto$f.hasOwnProperty;
+
+	/**
+	 * A specialized version of `baseIsEqualDeep` for objects with support for
+	 * partial deep comparisons.
+	 *
+	 * @private
+	 * @param {Object} object The object to compare.
+	 * @param {Object} other The other object to compare.
+	 * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+	 * @param {Function} customizer The function to customize comparisons.
+	 * @param {Function} equalFunc The function to determine equivalents of values.
+	 * @param {Object} stack Tracks traversed `object` and `other` objects.
+	 * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+	 */
+	function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
+	  var isPartial = bitmask & COMPARE_PARTIAL_FLAG$2,
+	      objProps = _getAllKeys(object),
+	      objLength = objProps.length,
+	      othProps = _getAllKeys(other),
+	      othLength = othProps.length;
+
+	  if (objLength != othLength && !isPartial) {
+	    return false;
+	  }
+	  var index = objLength;
+	  while (index--) {
+	    var key = objProps[index];
+	    if (!(isPartial ? key in other : hasOwnProperty$b.call(other, key))) {
+	      return false;
+	    }
+	  }
+	  // Check that cyclic values are equal.
+	  var objStacked = stack.get(object);
+	  var othStacked = stack.get(other);
+	  if (objStacked && othStacked) {
+	    return objStacked == other && othStacked == object;
+	  }
+	  var result = true;
+	  stack.set(object, other);
+	  stack.set(other, object);
+
+	  var skipCtor = isPartial;
+	  while (++index < objLength) {
+	    key = objProps[index];
+	    var objValue = object[key],
+	        othValue = other[key];
+
+	    if (customizer) {
+	      var compared = isPartial
+	        ? customizer(othValue, objValue, key, other, object, stack)
+	        : customizer(objValue, othValue, key, object, other, stack);
+	    }
+	    // Recursively compare objects (susceptible to call stack limits).
+	    if (!(compared === undefined
+	          ? (objValue === othValue || equalFunc(objValue, othValue, bitmask, customizer, stack))
+	          : compared
+	        )) {
+	      result = false;
+	      break;
+	    }
+	    skipCtor || (skipCtor = key == 'constructor');
+	  }
+	  if (result && !skipCtor) {
+	    var objCtor = object.constructor,
+	        othCtor = other.constructor;
+
+	    // Non `Object` object instances with different constructors are not equal.
+	    if (objCtor != othCtor &&
+	        ('constructor' in object && 'constructor' in other) &&
+	        !(typeof objCtor == 'function' && objCtor instanceof objCtor &&
+	          typeof othCtor == 'function' && othCtor instanceof othCtor)) {
+	      result = false;
+	    }
+	  }
+	  stack['delete'](object);
+	  stack['delete'](other);
+	  return result;
+	}
+
+	var _equalObjects = equalObjects;
+
+	/* Built-in method references that are verified to be native. */
+	var DataView$1 = _getNative(_root, 'DataView');
+
+	var _DataView = DataView$1;
+
+	/* Built-in method references that are verified to be native. */
+	var Promise$1 = _getNative(_root, 'Promise');
+
+	var _Promise = Promise$1;
+
+	/* Built-in method references that are verified to be native. */
+	var Set$1 = _getNative(_root, 'Set');
+
+	var _Set = Set$1;
+
+	/* Built-in method references that are verified to be native. */
+	var WeakMap$1 = _getNative(_root, 'WeakMap');
+
+	var _WeakMap = WeakMap$1;
+
+	/** `Object#toString` result references. */
+	var mapTag$2 = '[object Map]',
+	    objectTag$2 = '[object Object]',
+	    promiseTag = '[object Promise]',
+	    setTag$2 = '[object Set]',
+	    weakMapTag$1 = '[object WeakMap]';
+
+	var dataViewTag$2 = '[object DataView]';
+
+	/** Used to detect maps, sets, and weakmaps. */
+	var dataViewCtorString = _toSource(_DataView),
+	    mapCtorString = _toSource(_Map),
+	    promiseCtorString = _toSource(_Promise),
+	    setCtorString = _toSource(_Set),
+	    weakMapCtorString = _toSource(_WeakMap);
+
+	/**
+	 * Gets the `toStringTag` of `value`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the `toStringTag`.
+	 */
+	var getTag = _baseGetTag;
+
+	// Fallback for data views, maps, sets, and weak maps in IE 11 and promises in Node.js < 6.
+	if ((_DataView && getTag(new _DataView(new ArrayBuffer(1))) != dataViewTag$2) ||
+	    (_Map && getTag(new _Map) != mapTag$2) ||
+	    (_Promise && getTag(_Promise.resolve()) != promiseTag) ||
+	    (_Set && getTag(new _Set) != setTag$2) ||
+	    (_WeakMap && getTag(new _WeakMap) != weakMapTag$1)) {
+	  getTag = function(value) {
+	    var result = _baseGetTag(value),
+	        Ctor = result == objectTag$2 ? value.constructor : undefined,
+	        ctorString = Ctor ? _toSource(Ctor) : '';
+
+	    if (ctorString) {
+	      switch (ctorString) {
+	        case dataViewCtorString: return dataViewTag$2;
+	        case mapCtorString: return mapTag$2;
+	        case promiseCtorString: return promiseTag;
+	        case setCtorString: return setTag$2;
+	        case weakMapCtorString: return weakMapTag$1;
+	      }
+	    }
+	    return result;
+	  };
+	}
+
+	var _getTag = getTag;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG$3 = 1;
+
+	/** `Object#toString` result references. */
+	var argsTag$2 = '[object Arguments]',
+	    arrayTag$1 = '[object Array]',
+	    objectTag$3 = '[object Object]';
+
+	/** Used for built-in method references. */
+	var objectProto$g = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$c = objectProto$g.hasOwnProperty;
+
+	/**
+	 * A specialized version of `baseIsEqual` for arrays and objects which performs
+	 * deep comparisons and tracks traversed objects enabling objects with circular
+	 * references to be compared.
+	 *
+	 * @private
+	 * @param {Object} object The object to compare.
+	 * @param {Object} other The other object to compare.
+	 * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+	 * @param {Function} customizer The function to customize comparisons.
+	 * @param {Function} equalFunc The function to determine equivalents of values.
+	 * @param {Object} [stack] Tracks traversed `object` and `other` objects.
+	 * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+	 */
+	function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
+	  var objIsArr = isArray_1(object),
+	      othIsArr = isArray_1(other),
+	      objTag = objIsArr ? arrayTag$1 : _getTag(object),
+	      othTag = othIsArr ? arrayTag$1 : _getTag(other);
+
+	  objTag = objTag == argsTag$2 ? objectTag$3 : objTag;
+	  othTag = othTag == argsTag$2 ? objectTag$3 : othTag;
+
+	  var objIsObj = objTag == objectTag$3,
+	      othIsObj = othTag == objectTag$3,
+	      isSameTag = objTag == othTag;
+
+	  if (isSameTag && isBuffer_1(object)) {
+	    if (!isBuffer_1(other)) {
+	      return false;
+	    }
+	    objIsArr = true;
+	    objIsObj = false;
+	  }
+	  if (isSameTag && !objIsObj) {
+	    stack || (stack = new _Stack);
+	    return (objIsArr || isTypedArray_1(object))
+	      ? _equalArrays(object, other, bitmask, customizer, equalFunc, stack)
+	      : _equalByTag(object, other, objTag, bitmask, customizer, equalFunc, stack);
+	  }
+	  if (!(bitmask & COMPARE_PARTIAL_FLAG$3)) {
+	    var objIsWrapped = objIsObj && hasOwnProperty$c.call(object, '__wrapped__'),
+	        othIsWrapped = othIsObj && hasOwnProperty$c.call(other, '__wrapped__');
+
+	    if (objIsWrapped || othIsWrapped) {
+	      var objUnwrapped = objIsWrapped ? object.value() : object,
+	          othUnwrapped = othIsWrapped ? other.value() : other;
+
+	      stack || (stack = new _Stack);
+	      return equalFunc(objUnwrapped, othUnwrapped, bitmask, customizer, stack);
+	    }
+	  }
+	  if (!isSameTag) {
+	    return false;
+	  }
+	  stack || (stack = new _Stack);
+	  return _equalObjects(object, other, bitmask, customizer, equalFunc, stack);
+	}
+
+	var _baseIsEqualDeep = baseIsEqualDeep;
+
+	/**
+	 * The base implementation of `_.isEqual` which supports partial comparisons
+	 * and tracks traversed objects.
+	 *
+	 * @private
+	 * @param {*} value The value to compare.
+	 * @param {*} other The other value to compare.
+	 * @param {boolean} bitmask The bitmask flags.
+	 *  1 - Unordered comparison
+	 *  2 - Partial comparison
+	 * @param {Function} [customizer] The function to customize comparisons.
+	 * @param {Object} [stack] Tracks traversed `value` and `other` objects.
+	 * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+	 */
+	function baseIsEqual(value, other, bitmask, customizer, stack) {
+	  if (value === other) {
+	    return true;
+	  }
+	  if (value == null || other == null || (!isObjectLike_1(value) && !isObjectLike_1(other))) {
+	    return value !== value && other !== other;
+	  }
+	  return _baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
+	}
+
+	var _baseIsEqual = baseIsEqual;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG$4 = 1,
+	    COMPARE_UNORDERED_FLAG$2 = 2;
+
+	/**
+	 * The base implementation of `_.isMatch` without support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Object} object The object to inspect.
+	 * @param {Object} source The object of property values to match.
+	 * @param {Array} matchData The property names, values, and compare flags to match.
+	 * @param {Function} [customizer] The function to customize comparisons.
+	 * @returns {boolean} Returns `true` if `object` is a match, else `false`.
+	 */
+	function baseIsMatch(object, source, matchData, customizer) {
+	  var index = matchData.length,
+	      length = index,
+	      noCustomizer = !customizer;
+
+	  if (object == null) {
+	    return !length;
+	  }
+	  object = Object(object);
+	  while (index--) {
+	    var data = matchData[index];
+	    if ((noCustomizer && data[2])
+	          ? data[1] !== object[data[0]]
+	          : !(data[0] in object)
+	        ) {
+	      return false;
+	    }
+	  }
+	  while (++index < length) {
+	    data = matchData[index];
+	    var key = data[0],
+	        objValue = object[key],
+	        srcValue = data[1];
+
+	    if (noCustomizer && data[2]) {
+	      if (objValue === undefined && !(key in object)) {
+	        return false;
+	      }
+	    } else {
+	      var stack = new _Stack;
+	      if (customizer) {
+	        var result = customizer(objValue, srcValue, key, object, source, stack);
+	      }
+	      if (!(result === undefined
+	            ? _baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG$4 | COMPARE_UNORDERED_FLAG$2, customizer, stack)
+	            : result
+	          )) {
+	        return false;
+	      }
+	    }
+	  }
+	  return true;
+	}
+
+	var _baseIsMatch = baseIsMatch;
+
+	/**
+	 * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` if suitable for strict
+	 *  equality comparisons, else `false`.
+	 */
+	function isStrictComparable(value) {
+	  return value === value && !isObject_1(value);
+	}
+
+	var _isStrictComparable = isStrictComparable;
+
+	/**
+	 * Gets the property names, values, and compare flags of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the match data of `object`.
+	 */
+	function getMatchData(object) {
+	  var result = keys_1(object),
+	      length = result.length;
+
+	  while (length--) {
+	    var key = result[length],
+	        value = object[key];
+
+	    result[length] = [key, value, _isStrictComparable(value)];
+	  }
+	  return result;
+	}
+
+	var _getMatchData = getMatchData;
+
+	/**
+	 * A specialized version of `matchesProperty` for source values suitable
+	 * for strict equality comparisons, i.e. `===`.
+	 *
+	 * @private
+	 * @param {string} key The key of the property to get.
+	 * @param {*} srcValue The value to match.
+	 * @returns {Function} Returns the new spec function.
+	 */
+	function matchesStrictComparable(key, srcValue) {
+	  return function(object) {
+	    if (object == null) {
+	      return false;
+	    }
+	    return object[key] === srcValue &&
+	      (srcValue !== undefined || (key in Object(object)));
+	  };
+	}
+
+	var _matchesStrictComparable = matchesStrictComparable;
+
+	/**
+	 * The base implementation of `_.matches` which doesn't clone `source`.
+	 *
+	 * @private
+	 * @param {Object} source The object of property values to match.
+	 * @returns {Function} Returns the new spec function.
+	 */
+	function baseMatches(source) {
+	  var matchData = _getMatchData(source);
+	  if (matchData.length == 1 && matchData[0][2]) {
+	    return _matchesStrictComparable(matchData[0][0], matchData[0][1]);
+	  }
+	  return function(object) {
+	    return object === source || _baseIsMatch(object, source, matchData);
+	  };
+	}
+
+	var _baseMatches = baseMatches;
+
+	/** `Object#toString` result references. */
+	var symbolTag$4 = '[object Symbol]';
+
+	/**
+	 * Checks if `value` is classified as a `Symbol` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+	 * @example
+	 *
+	 * _.isSymbol(Symbol.iterator);
+	 * // => true
+	 *
+	 * _.isSymbol('abc');
+	 * // => false
+	 */
+	function isSymbol$3(value) {
+	  return typeof value == 'symbol' ||
+	    (isObjectLike_1(value) && _baseGetTag(value) == symbolTag$4);
+	}
+
+	var isSymbol_1 = isSymbol$3;
+
+	/** Used to match property names within property paths. */
+	var reIsDeepProp$2 = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
+	    reIsPlainProp$2 = /^\w*$/;
+
+	/**
+	 * Checks if `value` is a property name and not a property path.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {Object} [object] The object to query keys on.
+	 * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
+	 */
+	function isKey$2(value, object) {
+	  if (isArray_1(value)) {
+	    return false;
+	  }
+	  var type = typeof value;
+	  if (type == 'number' || type == 'symbol' || type == 'boolean' ||
+	      value == null || isSymbol_1(value)) {
+	    return true;
+	  }
+	  return reIsPlainProp$2.test(value) || !reIsDeepProp$2.test(value) ||
+	    (object != null && value in Object(object));
+	}
+
+	var _isKey = isKey$2;
+
+	/** Error message constants. */
+	var FUNC_ERROR_TEXT$2 = 'Expected a function';
+
+	/**
+	 * Creates a function that memoizes the result of `func`. If `resolver` is
+	 * provided, it determines the cache key for storing the result based on the
+	 * arguments provided to the memoized function. By default, the first argument
+	 * provided to the memoized function is used as the map cache key. The `func`
+	 * is invoked with the `this` binding of the memoized function.
+	 *
+	 * **Note:** The cache is exposed as the `cache` property on the memoized
+	 * function. Its creation may be customized by replacing the `_.memoize.Cache`
+	 * constructor with one whose instances implement the
+	 * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
+	 * method interface of `clear`, `delete`, `get`, `has`, and `set`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Function
+	 * @param {Function} func The function to have its output memoized.
+	 * @param {Function} [resolver] The function to resolve the cache key.
+	 * @returns {Function} Returns the new memoized function.
+	 * @example
+	 *
+	 * var object = { 'a': 1, 'b': 2 };
+	 * var other = { 'c': 3, 'd': 4 };
+	 *
+	 * var values = _.memoize(_.values);
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * values(other);
+	 * // => [3, 4]
+	 *
+	 * object.a = 2;
+	 * values(object);
+	 * // => [1, 2]
+	 *
+	 * // Modify the result cache.
+	 * values.cache.set(object, ['a', 'b']);
+	 * values(object);
+	 * // => ['a', 'b']
+	 *
+	 * // Replace `_.memoize.Cache`.
+	 * _.memoize.Cache = WeakMap;
+	 */
+	function memoize$3(func, resolver) {
+	  if (typeof func != 'function' || (resolver != null && typeof resolver != 'function')) {
+	    throw new TypeError(FUNC_ERROR_TEXT$2);
+	  }
+	  var memoized = function() {
+	    var args = arguments,
+	        key = resolver ? resolver.apply(this, args) : args[0],
+	        cache = memoized.cache;
+
+	    if (cache.has(key)) {
+	      return cache.get(key);
+	    }
+	    var result = func.apply(this, args);
+	    memoized.cache = cache.set(key, result) || cache;
+	    return result;
+	  };
+	  memoized.cache = new (memoize$3.Cache || _MapCache);
+	  return memoized;
+	}
+
+	// Expose `MapCache`.
+	memoize$3.Cache = _MapCache;
+
+	var memoize_1 = memoize$3;
+
+	/** Used as the maximum memoize cache size. */
+	var MAX_MEMOIZE_SIZE = 500;
+
+	/**
+	 * A specialized version of `_.memoize` which clears the memoized function's
+	 * cache when it exceeds `MAX_MEMOIZE_SIZE`.
+	 *
+	 * @private
+	 * @param {Function} func The function to have its output memoized.
+	 * @returns {Function} Returns the new memoized function.
+	 */
+	function memoizeCapped(func) {
+	  var result = memoize_1(func, function(key) {
+	    if (cache.size === MAX_MEMOIZE_SIZE) {
+	      cache.clear();
+	    }
+	    return key;
+	  });
+
+	  var cache = result.cache;
+	  return result;
+	}
+
+	var _memoizeCapped = memoizeCapped;
+
+	/** Used to match property names within property paths. */
+	var rePropName$2 = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
+
+	/** Used to match backslashes in property paths. */
+	var reEscapeChar$2 = /\\(\\)?/g;
+
+	/**
+	 * Converts `string` to a property path array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the property path array.
+	 */
+	var stringToPath$2 = _memoizeCapped(function(string) {
+	  var result = [];
+	  if (string.charCodeAt(0) === 46 /* . */) {
+	    result.push('');
+	  }
+	  string.replace(rePropName$2, function(match, number, quote, subString) {
+	    result.push(quote ? subString.replace(reEscapeChar$2, '$1') : (number || match));
+	  });
+	  return result;
+	});
+
+	var _stringToPath = stringToPath$2;
+
+	/** Used as references for various `Number` constants. */
+	var INFINITY$2 = 1 / 0;
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto$3 = _Symbol ? _Symbol.prototype : undefined,
+	    symbolToString$2 = symbolProto$3 ? symbolProto$3.toString : undefined;
+
+	/**
+	 * The base implementation of `_.toString` which doesn't convert nullish
+	 * values to empty strings.
+	 *
+	 * @private
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 */
+	function baseToString$2(value) {
+	  // Exit early for strings to avoid a performance hit in some environments.
+	  if (typeof value == 'string') {
+	    return value;
+	  }
+	  if (isArray_1(value)) {
+	    // Recursively convert values (susceptible to call stack limits).
+	    return _arrayMap(value, baseToString$2) + '';
+	  }
+	  if (isSymbol_1(value)) {
+	    return symbolToString$2 ? symbolToString$2.call(value) : '';
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY$2) ? '-0' : result;
+	}
+
+	var _baseToString = baseToString$2;
+
+	/**
+	 * Converts `value` to a string. An empty string is returned for `null`
+	 * and `undefined` values. The sign of `-0` is preserved.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to convert.
+	 * @returns {string} Returns the converted string.
+	 * @example
+	 *
+	 * _.toString(null);
+	 * // => ''
+	 *
+	 * _.toString(-0);
+	 * // => '-0'
+	 *
+	 * _.toString([1, 2, 3]);
+	 * // => '1,2,3'
+	 */
+	function toString$2(value) {
+	  return value == null ? '' : _baseToString(value);
+	}
+
+	var toString_1 = toString$2;
+
+	/**
+	 * Casts `value` to a path array if it's not one.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @param {Object} [object] The object to query keys on.
+	 * @returns {Array} Returns the cast property path array.
+	 */
+	function castPath$2(value, object) {
+	  if (isArray_1(value)) {
+	    return value;
+	  }
+	  return _isKey(value, object) ? [value] : _stringToPath(toString_1(value));
+	}
+
+	var _castPath = castPath$2;
+
+	/** Used as references for various `Number` constants. */
+	var INFINITY$3 = 1 / 0;
+
+	/**
+	 * Converts `value` to a string key if it's not a string or symbol.
+	 *
+	 * @private
+	 * @param {*} value The value to inspect.
+	 * @returns {string|symbol} Returns the key.
+	 */
+	function toKey$2(value) {
+	  if (typeof value == 'string' || isSymbol_1(value)) {
+	    return value;
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY$3) ? '-0' : result;
+	}
+
+	var _toKey = toKey$2;
+
+	/**
+	 * The base implementation of `_.get` without support for default values.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {Array|string} path The path of the property to get.
+	 * @returns {*} Returns the resolved value.
+	 */
+	function baseGet(object, path) {
+	  path = _castPath(path, object);
+
+	  var index = 0,
+	      length = path.length;
+
+	  while (object != null && index < length) {
+	    object = object[_toKey(path[index++])];
+	  }
+	  return (index && index == length) ? object : undefined;
+	}
+
+	var _baseGet = baseGet;
+
+	/**
+	 * Gets the value at `path` of `object`. If the resolved value is
+	 * `undefined`, the `defaultValue` is returned in its place.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.7.0
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @param {Array|string} path The path of the property to get.
+	 * @param {*} [defaultValue] The value returned for `undefined` resolved values.
+	 * @returns {*} Returns the resolved value.
+	 * @example
+	 *
+	 * var object = { 'a': [{ 'b': { 'c': 3 } }] };
+	 *
+	 * _.get(object, 'a[0].b.c');
+	 * // => 3
+	 *
+	 * _.get(object, ['a', '0', 'b', 'c']);
+	 * // => 3
+	 *
+	 * _.get(object, 'a.b.c', 'default');
+	 * // => 'default'
+	 */
+	function get(object, path, defaultValue) {
+	  var result = object == null ? undefined : _baseGet(object, path);
+	  return result === undefined ? defaultValue : result;
+	}
+
+	var get_1 = get;
+
+	/**
+	 * The base implementation of `_.hasIn` without support for deep paths.
+	 *
+	 * @private
+	 * @param {Object} [object] The object to query.
+	 * @param {Array|string} key The key to check.
+	 * @returns {boolean} Returns `true` if `key` exists, else `false`.
+	 */
+	function baseHasIn(object, key) {
+	  return object != null && key in Object(object);
+	}
+
+	var _baseHasIn = baseHasIn;
+
+	/**
+	 * Checks if `path` exists on `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {Array|string} path The path to check.
+	 * @param {Function} hasFunc The function to check properties.
+	 * @returns {boolean} Returns `true` if `path` exists, else `false`.
+	 */
+	function hasPath(object, path, hasFunc) {
+	  path = _castPath(path, object);
+
+	  var index = -1,
+	      length = path.length,
+	      result = false;
+
+	  while (++index < length) {
+	    var key = _toKey(path[index]);
+	    if (!(result = object != null && hasFunc(object, key))) {
+	      break;
+	    }
+	    object = object[key];
+	  }
+	  if (result || ++index != length) {
+	    return result;
+	  }
+	  length = object == null ? 0 : object.length;
+	  return !!length && isLength_1(length) && _isIndex(key, length) &&
+	    (isArray_1(object) || isArguments_1(object));
+	}
+
+	var _hasPath = hasPath;
+
+	/**
+	 * Checks if `path` is a direct or inherited property of `object`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @param {Array|string} path The path to check.
+	 * @returns {boolean} Returns `true` if `path` exists, else `false`.
+	 * @example
+	 *
+	 * var object = _.create({ 'a': _.create({ 'b': 2 }) });
+	 *
+	 * _.hasIn(object, 'a');
+	 * // => true
+	 *
+	 * _.hasIn(object, 'a.b');
+	 * // => true
+	 *
+	 * _.hasIn(object, ['a', 'b']);
+	 * // => true
+	 *
+	 * _.hasIn(object, 'b');
+	 * // => false
+	 */
+	function hasIn(object, path) {
+	  return object != null && _hasPath(object, path, _baseHasIn);
+	}
+
+	var hasIn_1 = hasIn;
+
+	/** Used to compose bitmasks for value comparisons. */
+	var COMPARE_PARTIAL_FLAG$5 = 1,
+	    COMPARE_UNORDERED_FLAG$3 = 2;
+
+	/**
+	 * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
+	 *
+	 * @private
+	 * @param {string} path The path of the property to get.
+	 * @param {*} srcValue The value to match.
+	 * @returns {Function} Returns the new spec function.
+	 */
+	function baseMatchesProperty(path, srcValue) {
+	  if (_isKey(path) && _isStrictComparable(srcValue)) {
+	    return _matchesStrictComparable(_toKey(path), srcValue);
+	  }
+	  return function(object) {
+	    var objValue = get_1(object, path);
+	    return (objValue === undefined && objValue === srcValue)
+	      ? hasIn_1(object, path)
+	      : _baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG$5 | COMPARE_UNORDERED_FLAG$3);
+	  };
+	}
+
+	var _baseMatchesProperty = baseMatchesProperty;
+
+	/**
+	 * The base implementation of `_.property` without support for deep paths.
+	 *
+	 * @private
+	 * @param {string} key The key of the property to get.
+	 * @returns {Function} Returns the new accessor function.
+	 */
+	function baseProperty(key) {
+	  return function(object) {
+	    return object == null ? undefined : object[key];
+	  };
+	}
+
+	var _baseProperty = baseProperty;
+
+	/**
+	 * A specialized version of `baseProperty` which supports deep paths.
+	 *
+	 * @private
+	 * @param {Array|string} path The path of the property to get.
+	 * @returns {Function} Returns the new accessor function.
+	 */
+	function basePropertyDeep(path) {
+	  return function(object) {
+	    return _baseGet(object, path);
+	  };
+	}
+
+	var _basePropertyDeep = basePropertyDeep;
+
+	/**
+	 * Creates a function that returns the value at `path` of a given object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 2.4.0
+	 * @category Util
+	 * @param {Array|string} path The path of the property to get.
+	 * @returns {Function} Returns the new accessor function.
+	 * @example
+	 *
+	 * var objects = [
+	 *   { 'a': { 'b': 2 } },
+	 *   { 'a': { 'b': 1 } }
+	 * ];
+	 *
+	 * _.map(objects, _.property('a.b'));
+	 * // => [2, 1]
+	 *
+	 * _.map(_.sortBy(objects, _.property(['a', 'b'])), 'a.b');
+	 * // => [1, 2]
+	 */
+	function property(path) {
+	  return _isKey(path) ? _baseProperty(_toKey(path)) : _basePropertyDeep(path);
+	}
+
+	var property_1 = property;
+
+	/**
+	 * The base implementation of `_.iteratee`.
+	 *
+	 * @private
+	 * @param {*} [value=_.identity] The value to convert to an iteratee.
+	 * @returns {Function} Returns the iteratee.
+	 */
+	function baseIteratee(value) {
+	  // Don't store the `typeof` result in a variable to avoid a JIT bug in Safari 9.
+	  // See https://bugs.webkit.org/show_bug.cgi?id=156034 for more details.
+	  if (typeof value == 'function') {
+	    return value;
+	  }
+	  if (value == null) {
+	    return identity_1;
+	  }
+	  if (typeof value == 'object') {
+	    return isArray_1(value)
+	      ? _baseMatchesProperty(value[0], value[1])
+	      : _baseMatches(value);
+	  }
+	  return property_1(value);
+	}
+
+	var _baseIteratee = baseIteratee;
+
+	/**
+	 * Creates a `baseEach` or `baseEachRight` function.
+	 *
+	 * @private
+	 * @param {Function} eachFunc The function to iterate over a collection.
+	 * @param {boolean} [fromRight] Specify iterating from right to left.
+	 * @returns {Function} Returns the new base function.
+	 */
+	function createBaseEach(eachFunc, fromRight) {
+	  return function(collection, iteratee) {
+	    if (collection == null) {
+	      return collection;
+	    }
+	    if (!isArrayLike_1(collection)) {
+	      return eachFunc(collection, iteratee);
+	    }
+	    var length = collection.length,
+	        index = fromRight ? length : -1,
+	        iterable = Object(collection);
+
+	    while ((fromRight ? index-- : ++index < length)) {
+	      if (iteratee(iterable[index], index, iterable) === false) {
+	        break;
+	      }
+	    }
+	    return collection;
+	  };
+	}
+
+	var _createBaseEach = createBaseEach;
+
+	/**
+	 * The base implementation of `_.forEach` without support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array|Object} collection The collection to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array|Object} Returns `collection`.
+	 */
+	var baseEach = _createBaseEach(_baseForOwn);
+
+	var _baseEach = baseEach;
+
+	/**
+	 * The base implementation of `_.map` without support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array|Object} collection The collection to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the new mapped array.
+	 */
+	function baseMap(collection, iteratee) {
+	  var index = -1,
+	      result = isArrayLike_1(collection) ? Array(collection.length) : [];
+
+	  _baseEach(collection, function(value, key, collection) {
+	    result[++index] = iteratee(value, key, collection);
+	  });
+	  return result;
+	}
+
+	var _baseMap = baseMap;
+
+	/**
+	 * Creates an array of values by running each element in `collection` thru
+	 * `iteratee`. The iteratee is invoked with three arguments:
+	 * (value, index|key, collection).
+	 *
+	 * Many lodash methods are guarded to work as iteratees for methods like
+	 * `_.every`, `_.filter`, `_.map`, `_.mapValues`, `_.reject`, and `_.some`.
+	 *
+	 * The guarded methods are:
+	 * `ary`, `chunk`, `curry`, `curryRight`, `drop`, `dropRight`, `every`,
+	 * `fill`, `invert`, `parseInt`, `random`, `range`, `rangeRight`, `repeat`,
+	 * `sampleSize`, `slice`, `some`, `sortBy`, `split`, `take`, `takeRight`,
+	 * `template`, `trim`, `trimEnd`, `trimStart`, and `words`
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Collection
+	 * @param {Array|Object} collection The collection to iterate over.
+	 * @param {Function} [iteratee=_.identity] The function invoked per iteration.
+	 * @returns {Array} Returns the new mapped array.
+	 * @example
+	 *
+	 * function square(n) {
+	 *   return n * n;
+	 * }
+	 *
+	 * _.map([4, 8], square);
+	 * // => [16, 64]
+	 *
+	 * _.map({ 'a': 4, 'b': 8 }, square);
+	 * // => [16, 64] (iteration order is not guaranteed)
+	 *
+	 * var users = [
+	 *   { 'user': 'barney' },
+	 *   { 'user': 'fred' }
+	 * ];
+	 *
+	 * // The `_.property` iteratee shorthand.
+	 * _.map(users, 'user');
+	 * // => ['barney', 'fred']
+	 */
+	function map(collection, iteratee) {
+	  var func = isArray_1(collection) ? _arrayMap : _baseMap;
+	  return func(collection, _baseIteratee(iteratee));
+	}
+
+	var map_1 = map;
+
+	var flattenNames_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.flattenNames = undefined;
+
+
+
+	var _isString3 = _interopRequireDefault(isString_1);
+
+
+
+	var _forOwn3 = _interopRequireDefault(forOwn_1);
+
+
+
+	var _isPlainObject3 = _interopRequireDefault(isPlainObject_1);
+
+
+
+	var _map3 = _interopRequireDefault(map_1);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var flattenNames = exports.flattenNames = function flattenNames() {
+	  var things = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+
+	  var names = [];
+
+	  (0, _map3.default)(things, function (thing) {
+	    if (Array.isArray(thing)) {
+	      flattenNames(thing).map(function (name) {
+	        return names.push(name);
+	      });
+	    } else if ((0, _isPlainObject3.default)(thing)) {
+	      (0, _forOwn3.default)(thing, function (value, key) {
+	        value === true && names.push(key);
+	        names.push(key + '-' + value);
+	      });
+	    } else if ((0, _isString3.default)(thing)) {
+	      names.push(thing);
+	    }
+	  });
+
+	  return names;
+	};
+
+	exports.default = flattenNames;
+	});
+
+	unwrapExports(flattenNames_1);
+	flattenNames_1.flattenNames;
+
+	/**
+	 * A specialized version of `_.forEach` for arrays without support for
+	 * iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns `array`.
+	 */
+	function arrayEach(array, iteratee) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length;
+
+	  while (++index < length) {
+	    if (iteratee(array[index], index, array) === false) {
+	      break;
+	    }
+	  }
+	  return array;
+	}
+
+	var _arrayEach = arrayEach;
+
+	var defineProperty$1 = (function() {
+	  try {
+	    var func = _getNative(Object, 'defineProperty');
+	    func({}, '', {});
+	    return func;
+	  } catch (e) {}
+	}());
+
+	var _defineProperty$1 = defineProperty$1;
+
+	/**
+	 * The base implementation of `assignValue` and `assignMergeValue` without
+	 * value checks.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {string} key The key of the property to assign.
+	 * @param {*} value The value to assign.
+	 */
+	function baseAssignValue(object, key, value) {
+	  if (key == '__proto__' && _defineProperty$1) {
+	    _defineProperty$1(object, key, {
+	      'configurable': true,
+	      'enumerable': true,
+	      'value': value,
+	      'writable': true
+	    });
+	  } else {
+	    object[key] = value;
+	  }
+	}
+
+	var _baseAssignValue = baseAssignValue;
+
+	/** Used for built-in method references. */
+	var objectProto$h = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$d = objectProto$h.hasOwnProperty;
+
+	/**
+	 * Assigns `value` to `key` of `object` if the existing value is not equivalent
+	 * using [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+	 * for equality comparisons.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {string} key The key of the property to assign.
+	 * @param {*} value The value to assign.
+	 */
+	function assignValue$1(object, key, value) {
+	  var objValue = object[key];
+	  if (!(hasOwnProperty$d.call(object, key) && eq_1(objValue, value)) ||
+	      (value === undefined && !(key in object))) {
+	    _baseAssignValue(object, key, value);
+	  }
+	}
+
+	var _assignValue = assignValue$1;
+
+	/**
+	 * Copies properties of `source` to `object`.
+	 *
+	 * @private
+	 * @param {Object} source The object to copy properties from.
+	 * @param {Array} props The property identifiers to copy.
+	 * @param {Object} [object={}] The object to copy properties to.
+	 * @param {Function} [customizer] The function to customize copied values.
+	 * @returns {Object} Returns `object`.
+	 */
+	function copyObject(source, props, object, customizer) {
+	  var isNew = !object;
+	  object || (object = {});
+
+	  var index = -1,
+	      length = props.length;
+
+	  while (++index < length) {
+	    var key = props[index];
+
+	    var newValue = customizer
+	      ? customizer(object[key], source[key], key, object, source)
+	      : undefined;
+
+	    if (newValue === undefined) {
+	      newValue = source[key];
+	    }
+	    if (isNew) {
+	      _baseAssignValue(object, key, newValue);
+	    } else {
+	      _assignValue(object, key, newValue);
+	    }
+	  }
+	  return object;
+	}
+
+	var _copyObject = copyObject;
+
+	/**
+	 * The base implementation of `_.assign` without support for multiple sources
+	 * or `customizer` functions.
+	 *
+	 * @private
+	 * @param {Object} object The destination object.
+	 * @param {Object} source The source object.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseAssign(object, source) {
+	  return object && _copyObject(source, keys_1(source), object);
+	}
+
+	var _baseAssign = baseAssign;
+
+	/**
+	 * This function is like
+	 * [`Object.keys`](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+	 * except that it includes inherited enumerable properties.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function nativeKeysIn(object) {
+	  var result = [];
+	  if (object != null) {
+	    for (var key in Object(object)) {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	var _nativeKeysIn = nativeKeysIn;
+
+	/** Used for built-in method references. */
+	var objectProto$i = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$e = objectProto$i.hasOwnProperty;
+
+	/**
+	 * The base implementation of `_.keysIn` which doesn't treat sparse arrays as dense.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function baseKeysIn(object) {
+	  if (!isObject_1(object)) {
+	    return _nativeKeysIn(object);
+	  }
+	  var isProto = _isPrototype(object),
+	      result = [];
+
+	  for (var key in object) {
+	    if (!(key == 'constructor' && (isProto || !hasOwnProperty$e.call(object, key)))) {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	var _baseKeysIn = baseKeysIn;
+
+	/**
+	 * Creates an array of the own and inherited enumerable property names of `object`.
+	 *
+	 * **Note:** Non-object values are coerced to objects.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.0.0
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.keysIn(new Foo);
+	 * // => ['a', 'b', 'c'] (iteration order is not guaranteed)
+	 */
+	function keysIn(object) {
+	  return isArrayLike_1(object) ? _arrayLikeKeys(object, true) : _baseKeysIn(object);
+	}
+
+	var keysIn_1 = keysIn;
+
+	/**
+	 * The base implementation of `_.assignIn` without support for multiple sources
+	 * or `customizer` functions.
+	 *
+	 * @private
+	 * @param {Object} object The destination object.
+	 * @param {Object} source The source object.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseAssignIn(object, source) {
+	  return object && _copyObject(source, keysIn_1(source), object);
+	}
+
+	var _baseAssignIn = baseAssignIn;
+
+	var _cloneBuffer = createCommonjsModule(function (module, exports) {
+	/** Detect free variable `exports`. */
+	var freeExports = exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule = freeExports && 'object' == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports = freeModule && freeModule.exports === freeExports;
+
+	/** Built-in value references. */
+	var Buffer = moduleExports ? _root.Buffer : undefined,
+	    allocUnsafe = Buffer ? Buffer.allocUnsafe : undefined;
+
+	/**
+	 * Creates a clone of  `buffer`.
+	 *
+	 * @private
+	 * @param {Buffer} buffer The buffer to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Buffer} Returns the cloned buffer.
+	 */
+	function cloneBuffer(buffer, isDeep) {
+	  if (isDeep) {
+	    return buffer.slice();
+	  }
+	  var length = buffer.length,
+	      result = allocUnsafe ? allocUnsafe(length) : new buffer.constructor(length);
+
+	  buffer.copy(result);
+	  return result;
+	}
+
+	module.exports = cloneBuffer;
+	});
+
+	/**
+	 * Copies the values of `source` to `array`.
+	 *
+	 * @private
+	 * @param {Array} source The array to copy values from.
+	 * @param {Array} [array=[]] The array to copy values to.
+	 * @returns {Array} Returns `array`.
+	 */
+	function copyArray$1(source, array) {
+	  var index = -1,
+	      length = source.length;
+
+	  array || (array = Array(length));
+	  while (++index < length) {
+	    array[index] = source[index];
+	  }
+	  return array;
+	}
+
+	var _copyArray = copyArray$1;
+
+	/**
+	 * Copies own symbols of `source` to `object`.
+	 *
+	 * @private
+	 * @param {Object} source The object to copy symbols from.
+	 * @param {Object} [object={}] The object to copy symbols to.
+	 * @returns {Object} Returns `object`.
+	 */
+	function copySymbols(source, object) {
+	  return _copyObject(source, _getSymbols(source), object);
+	}
+
+	var _copySymbols = copySymbols;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeGetSymbols$1 = Object.getOwnPropertySymbols;
+
+	/**
+	 * Creates an array of the own and inherited enumerable symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of symbols.
+	 */
+	var getSymbolsIn = !nativeGetSymbols$1 ? stubArray_1 : function(object) {
+	  var result = [];
+	  while (object) {
+	    _arrayPush(result, _getSymbols(object));
+	    object = _getPrototype(object);
+	  }
+	  return result;
+	};
+
+	var _getSymbolsIn = getSymbolsIn;
+
+	/**
+	 * Copies own and inherited symbols of `source` to `object`.
+	 *
+	 * @private
+	 * @param {Object} source The object to copy symbols from.
+	 * @param {Object} [object={}] The object to copy symbols to.
+	 * @returns {Object} Returns `object`.
+	 */
+	function copySymbolsIn(source, object) {
+	  return _copyObject(source, _getSymbolsIn(source), object);
+	}
+
+	var _copySymbolsIn = copySymbolsIn;
+
+	/**
+	 * Creates an array of own and inherited enumerable property names and
+	 * symbols of `object`.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names and symbols.
+	 */
+	function getAllKeysIn(object) {
+	  return _baseGetAllKeys(object, keysIn_1, _getSymbolsIn);
+	}
+
+	var _getAllKeysIn = getAllKeysIn;
+
+	/** Used for built-in method references. */
+	var objectProto$j = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$f = objectProto$j.hasOwnProperty;
+
+	/**
+	 * Initializes an array clone.
+	 *
+	 * @private
+	 * @param {Array} array The array to clone.
+	 * @returns {Array} Returns the initialized clone.
+	 */
+	function initCloneArray(array) {
+	  var length = array.length,
+	      result = new array.constructor(length);
+
+	  // Add properties assigned by `RegExp#exec`.
+	  if (length && typeof array[0] == 'string' && hasOwnProperty$f.call(array, 'index')) {
+	    result.index = array.index;
+	    result.input = array.input;
+	  }
+	  return result;
+	}
+
+	var _initCloneArray = initCloneArray;
+
+	/**
+	 * Creates a clone of `arrayBuffer`.
+	 *
+	 * @private
+	 * @param {ArrayBuffer} arrayBuffer The array buffer to clone.
+	 * @returns {ArrayBuffer} Returns the cloned array buffer.
+	 */
+	function cloneArrayBuffer(arrayBuffer) {
+	  var result = new arrayBuffer.constructor(arrayBuffer.byteLength);
+	  new _Uint8Array(result).set(new _Uint8Array(arrayBuffer));
+	  return result;
+	}
+
+	var _cloneArrayBuffer = cloneArrayBuffer;
+
+	/**
+	 * Creates a clone of `dataView`.
+	 *
+	 * @private
+	 * @param {Object} dataView The data view to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned data view.
+	 */
+	function cloneDataView(dataView, isDeep) {
+	  var buffer = isDeep ? _cloneArrayBuffer(dataView.buffer) : dataView.buffer;
+	  return new dataView.constructor(buffer, dataView.byteOffset, dataView.byteLength);
+	}
+
+	var _cloneDataView = cloneDataView;
+
+	/** Used to match `RegExp` flags from their coerced string values. */
+	var reFlags = /\w*$/;
+
+	/**
+	 * Creates a clone of `regexp`.
+	 *
+	 * @private
+	 * @param {Object} regexp The regexp to clone.
+	 * @returns {Object} Returns the cloned regexp.
+	 */
+	function cloneRegExp(regexp) {
+	  var result = new regexp.constructor(regexp.source, reFlags.exec(regexp));
+	  result.lastIndex = regexp.lastIndex;
+	  return result;
+	}
+
+	var _cloneRegExp = cloneRegExp;
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto$4 = _Symbol ? _Symbol.prototype : undefined,
+	    symbolValueOf$1 = symbolProto$4 ? symbolProto$4.valueOf : undefined;
+
+	/**
+	 * Creates a clone of the `symbol` object.
+	 *
+	 * @private
+	 * @param {Object} symbol The symbol object to clone.
+	 * @returns {Object} Returns the cloned symbol object.
+	 */
+	function cloneSymbol(symbol) {
+	  return symbolValueOf$1 ? Object(symbolValueOf$1.call(symbol)) : {};
+	}
+
+	var _cloneSymbol = cloneSymbol;
+
+	/**
+	 * Creates a clone of `typedArray`.
+	 *
+	 * @private
+	 * @param {Object} typedArray The typed array to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the cloned typed array.
+	 */
+	function cloneTypedArray(typedArray, isDeep) {
+	  var buffer = isDeep ? _cloneArrayBuffer(typedArray.buffer) : typedArray.buffer;
+	  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length);
+	}
+
+	var _cloneTypedArray = cloneTypedArray;
+
+	/** `Object#toString` result references. */
+	var boolTag$2 = '[object Boolean]',
+	    dateTag$2 = '[object Date]',
+	    mapTag$3 = '[object Map]',
+	    numberTag$2 = '[object Number]',
+	    regexpTag$2 = '[object RegExp]',
+	    setTag$3 = '[object Set]',
+	    stringTag$4 = '[object String]',
+	    symbolTag$5 = '[object Symbol]';
+
+	var arrayBufferTag$2 = '[object ArrayBuffer]',
+	    dataViewTag$3 = '[object DataView]',
+	    float32Tag$1 = '[object Float32Array]',
+	    float64Tag$1 = '[object Float64Array]',
+	    int8Tag$1 = '[object Int8Array]',
+	    int16Tag$1 = '[object Int16Array]',
+	    int32Tag$1 = '[object Int32Array]',
+	    uint8Tag$1 = '[object Uint8Array]',
+	    uint8ClampedTag$1 = '[object Uint8ClampedArray]',
+	    uint16Tag$1 = '[object Uint16Array]',
+	    uint32Tag$1 = '[object Uint32Array]';
+
+	/**
+	 * Initializes an object clone based on its `toStringTag`.
+	 *
+	 * **Note:** This function only supports cloning values with tags of
+	 * `Boolean`, `Date`, `Error`, `Map`, `Number`, `RegExp`, `Set`, or `String`.
+	 *
+	 * @private
+	 * @param {Object} object The object to clone.
+	 * @param {string} tag The `toStringTag` of the object to clone.
+	 * @param {boolean} [isDeep] Specify a deep clone.
+	 * @returns {Object} Returns the initialized clone.
+	 */
+	function initCloneByTag(object, tag, isDeep) {
+	  var Ctor = object.constructor;
+	  switch (tag) {
+	    case arrayBufferTag$2:
+	      return _cloneArrayBuffer(object);
+
+	    case boolTag$2:
+	    case dateTag$2:
+	      return new Ctor(+object);
+
+	    case dataViewTag$3:
+	      return _cloneDataView(object, isDeep);
+
+	    case float32Tag$1: case float64Tag$1:
+	    case int8Tag$1: case int16Tag$1: case int32Tag$1:
+	    case uint8Tag$1: case uint8ClampedTag$1: case uint16Tag$1: case uint32Tag$1:
+	      return _cloneTypedArray(object, isDeep);
+
+	    case mapTag$3:
+	      return new Ctor;
+
+	    case numberTag$2:
+	    case stringTag$4:
+	      return new Ctor(object);
+
+	    case regexpTag$2:
+	      return _cloneRegExp(object);
+
+	    case setTag$3:
+	      return new Ctor;
+
+	    case symbolTag$5:
+	      return _cloneSymbol(object);
+	  }
+	}
+
+	var _initCloneByTag = initCloneByTag;
+
+	/** Built-in value references. */
+	var objectCreate = Object.create;
+
+	/**
+	 * The base implementation of `_.create` without support for assigning
+	 * properties to the created object.
+	 *
+	 * @private
+	 * @param {Object} proto The object to inherit from.
+	 * @returns {Object} Returns the new object.
+	 */
+	var baseCreate = (function() {
+	  function object() {}
+	  return function(proto) {
+	    if (!isObject_1(proto)) {
+	      return {};
+	    }
+	    if (objectCreate) {
+	      return objectCreate(proto);
+	    }
+	    object.prototype = proto;
+	    var result = new object;
+	    object.prototype = undefined;
+	    return result;
+	  };
+	}());
+
+	var _baseCreate = baseCreate;
+
+	/**
+	 * Initializes an object clone.
+	 *
+	 * @private
+	 * @param {Object} object The object to clone.
+	 * @returns {Object} Returns the initialized clone.
+	 */
+	function initCloneObject(object) {
+	  return (typeof object.constructor == 'function' && !_isPrototype(object))
+	    ? _baseCreate(_getPrototype(object))
+	    : {};
+	}
+
+	var _initCloneObject = initCloneObject;
+
+	/** `Object#toString` result references. */
+	var mapTag$4 = '[object Map]';
+
+	/**
+	 * The base implementation of `_.isMap` without Node.js optimizations.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a map, else `false`.
+	 */
+	function baseIsMap(value) {
+	  return isObjectLike_1(value) && _getTag(value) == mapTag$4;
+	}
+
+	var _baseIsMap = baseIsMap;
+
+	/* Node.js helper references. */
+	var nodeIsMap = _nodeUtil && _nodeUtil.isMap;
+
+	/**
+	 * Checks if `value` is classified as a `Map` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.3.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a map, else `false`.
+	 * @example
+	 *
+	 * _.isMap(new Map);
+	 * // => true
+	 *
+	 * _.isMap(new WeakMap);
+	 * // => false
+	 */
+	var isMap = nodeIsMap ? _baseUnary(nodeIsMap) : _baseIsMap;
+
+	var isMap_1 = isMap;
+
+	/** `Object#toString` result references. */
+	var setTag$4 = '[object Set]';
+
+	/**
+	 * The base implementation of `_.isSet` without Node.js optimizations.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a set, else `false`.
+	 */
+	function baseIsSet(value) {
+	  return isObjectLike_1(value) && _getTag(value) == setTag$4;
+	}
+
+	var _baseIsSet = baseIsSet;
+
+	/* Node.js helper references. */
+	var nodeIsSet = _nodeUtil && _nodeUtil.isSet;
+
+	/**
+	 * Checks if `value` is classified as a `Set` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.3.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a set, else `false`.
+	 * @example
+	 *
+	 * _.isSet(new Set);
+	 * // => true
+	 *
+	 * _.isSet(new WeakSet);
+	 * // => false
+	 */
+	var isSet = nodeIsSet ? _baseUnary(nodeIsSet) : _baseIsSet;
+
+	var isSet_1 = isSet;
+
+	/** Used to compose bitmasks for cloning. */
+	var CLONE_DEEP_FLAG = 1,
+	    CLONE_FLAT_FLAG = 2,
+	    CLONE_SYMBOLS_FLAG = 4;
+
+	/** `Object#toString` result references. */
+	var argsTag$3 = '[object Arguments]',
+	    arrayTag$2 = '[object Array]',
+	    boolTag$3 = '[object Boolean]',
+	    dateTag$3 = '[object Date]',
+	    errorTag$2 = '[object Error]',
+	    funcTag$4 = '[object Function]',
+	    genTag$3 = '[object GeneratorFunction]',
+	    mapTag$5 = '[object Map]',
+	    numberTag$3 = '[object Number]',
+	    objectTag$4 = '[object Object]',
+	    regexpTag$3 = '[object RegExp]',
+	    setTag$5 = '[object Set]',
+	    stringTag$5 = '[object String]',
+	    symbolTag$6 = '[object Symbol]',
+	    weakMapTag$2 = '[object WeakMap]';
+
+	var arrayBufferTag$3 = '[object ArrayBuffer]',
+	    dataViewTag$4 = '[object DataView]',
+	    float32Tag$2 = '[object Float32Array]',
+	    float64Tag$2 = '[object Float64Array]',
+	    int8Tag$2 = '[object Int8Array]',
+	    int16Tag$2 = '[object Int16Array]',
+	    int32Tag$2 = '[object Int32Array]',
+	    uint8Tag$2 = '[object Uint8Array]',
+	    uint8ClampedTag$2 = '[object Uint8ClampedArray]',
+	    uint16Tag$2 = '[object Uint16Array]',
+	    uint32Tag$2 = '[object Uint32Array]';
+
+	/** Used to identify `toStringTag` values supported by `_.clone`. */
+	var cloneableTags = {};
+	cloneableTags[argsTag$3] = cloneableTags[arrayTag$2] =
+	cloneableTags[arrayBufferTag$3] = cloneableTags[dataViewTag$4] =
+	cloneableTags[boolTag$3] = cloneableTags[dateTag$3] =
+	cloneableTags[float32Tag$2] = cloneableTags[float64Tag$2] =
+	cloneableTags[int8Tag$2] = cloneableTags[int16Tag$2] =
+	cloneableTags[int32Tag$2] = cloneableTags[mapTag$5] =
+	cloneableTags[numberTag$3] = cloneableTags[objectTag$4] =
+	cloneableTags[regexpTag$3] = cloneableTags[setTag$5] =
+	cloneableTags[stringTag$5] = cloneableTags[symbolTag$6] =
+	cloneableTags[uint8Tag$2] = cloneableTags[uint8ClampedTag$2] =
+	cloneableTags[uint16Tag$2] = cloneableTags[uint32Tag$2] = true;
+	cloneableTags[errorTag$2] = cloneableTags[funcTag$4] =
+	cloneableTags[weakMapTag$2] = false;
+
+	/**
+	 * The base implementation of `_.clone` and `_.cloneDeep` which tracks
+	 * traversed objects.
+	 *
+	 * @private
+	 * @param {*} value The value to clone.
+	 * @param {boolean} bitmask The bitmask flags.
+	 *  1 - Deep clone
+	 *  2 - Flatten inherited properties
+	 *  4 - Clone symbols
+	 * @param {Function} [customizer] The function to customize cloning.
+	 * @param {string} [key] The key of `value`.
+	 * @param {Object} [object] The parent object of `value`.
+	 * @param {Object} [stack] Tracks traversed objects and their clone counterparts.
+	 * @returns {*} Returns the cloned value.
+	 */
+	function baseClone(value, bitmask, customizer, key, object, stack) {
+	  var result,
+	      isDeep = bitmask & CLONE_DEEP_FLAG,
+	      isFlat = bitmask & CLONE_FLAT_FLAG,
+	      isFull = bitmask & CLONE_SYMBOLS_FLAG;
+
+	  if (customizer) {
+	    result = object ? customizer(value, key, object, stack) : customizer(value);
+	  }
+	  if (result !== undefined) {
+	    return result;
+	  }
+	  if (!isObject_1(value)) {
+	    return value;
+	  }
+	  var isArr = isArray_1(value);
+	  if (isArr) {
+	    result = _initCloneArray(value);
+	    if (!isDeep) {
+	      return _copyArray(value, result);
+	    }
+	  } else {
+	    var tag = _getTag(value),
+	        isFunc = tag == funcTag$4 || tag == genTag$3;
+
+	    if (isBuffer_1(value)) {
+	      return _cloneBuffer(value, isDeep);
+	    }
+	    if (tag == objectTag$4 || tag == argsTag$3 || (isFunc && !object)) {
+	      result = (isFlat || isFunc) ? {} : _initCloneObject(value);
+	      if (!isDeep) {
+	        return isFlat
+	          ? _copySymbolsIn(value, _baseAssignIn(result, value))
+	          : _copySymbols(value, _baseAssign(result, value));
+	      }
+	    } else {
+	      if (!cloneableTags[tag]) {
+	        return object ? value : {};
+	      }
+	      result = _initCloneByTag(value, tag, isDeep);
+	    }
+	  }
+	  // Check for circular references and return its corresponding clone.
+	  stack || (stack = new _Stack);
+	  var stacked = stack.get(value);
+	  if (stacked) {
+	    return stacked;
+	  }
+	  stack.set(value, result);
+
+	  if (isSet_1(value)) {
+	    value.forEach(function(subValue) {
+	      result.add(baseClone(subValue, bitmask, customizer, subValue, value, stack));
+	    });
+	  } else if (isMap_1(value)) {
+	    value.forEach(function(subValue, key) {
+	      result.set(key, baseClone(subValue, bitmask, customizer, key, value, stack));
+	    });
+	  }
+
+	  var keysFunc = isFull
+	    ? (isFlat ? _getAllKeysIn : _getAllKeys)
+	    : (isFlat ? keysIn_1 : keys_1);
+
+	  var props = isArr ? undefined : keysFunc(value);
+	  _arrayEach(props || value, function(subValue, key) {
+	    if (props) {
+	      key = subValue;
+	      subValue = value[key];
+	    }
+	    // Recursively populate clone (susceptible to call stack limits).
+	    _assignValue(result, key, baseClone(subValue, bitmask, customizer, key, value, stack));
+	  });
+	  return result;
+	}
+
+	var _baseClone = baseClone;
+
+	/** Used to compose bitmasks for cloning. */
+	var CLONE_DEEP_FLAG$1 = 1,
+	    CLONE_SYMBOLS_FLAG$1 = 4;
+
+	/**
+	 * This method is like `_.clone` except that it recursively clones `value`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 1.0.0
+	 * @category Lang
+	 * @param {*} value The value to recursively clone.
+	 * @returns {*} Returns the deep cloned value.
+	 * @see _.clone
+	 * @example
+	 *
+	 * var objects = [{ 'a': 1 }, { 'b': 2 }];
+	 *
+	 * var deep = _.cloneDeep(objects);
+	 * console.log(deep[0] === objects[0]);
+	 * // => false
+	 */
+	function cloneDeep(value) {
+	  return _baseClone(value, CLONE_DEEP_FLAG$1 | CLONE_SYMBOLS_FLAG$1);
+	}
+
+	var cloneDeep_1 = cloneDeep;
+
+	var mergeClasses_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.mergeClasses = undefined;
+
+
+
+	var _forOwn3 = _interopRequireDefault(forOwn_1);
+
+
+
+	var _cloneDeep3 = _interopRequireDefault(cloneDeep_1);
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var mergeClasses = exports.mergeClasses = function mergeClasses(classes) {
+	  var activeNames = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [];
+
+	  var styles = classes.default && (0, _cloneDeep3.default)(classes.default) || {};
+	  activeNames.map(function (name) {
+	    var toMerge = classes[name];
+	    if (toMerge) {
+	      (0, _forOwn3.default)(toMerge, function (value, key) {
+	        if (!styles[key]) {
+	          styles[key] = {};
+	        }
+
+	        styles[key] = _extends({}, styles[key], toMerge[key]);
+	      });
+	    }
+
+	    return name;
+	  });
+	  return styles;
+	};
+
+	exports.default = mergeClasses;
+	});
+
+	unwrapExports(mergeClasses_1);
+	mergeClasses_1.mergeClasses;
+
+	var autoprefix_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.autoprefix = undefined;
+
+
+
+	var _forOwn3 = _interopRequireDefault(forOwn_1);
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var transforms = {
+	  borderRadius: function borderRadius(value) {
+	    return {
+	      msBorderRadius: value,
+	      MozBorderRadius: value,
+	      OBorderRadius: value,
+	      WebkitBorderRadius: value,
+	      borderRadius: value
+	    };
+	  },
+	  boxShadow: function boxShadow(value) {
+	    return {
+	      msBoxShadow: value,
+	      MozBoxShadow: value,
+	      OBoxShadow: value,
+	      WebkitBoxShadow: value,
+	      boxShadow: value
+	    };
+	  },
+	  userSelect: function userSelect(value) {
+	    return {
+	      WebkitTouchCallout: value,
+	      KhtmlUserSelect: value,
+	      MozUserSelect: value,
+	      msUserSelect: value,
+	      WebkitUserSelect: value,
+	      userSelect: value
+	    };
+	  },
+
+	  flex: function flex(value) {
+	    return {
+	      WebkitBoxFlex: value,
+	      MozBoxFlex: value,
+	      WebkitFlex: value,
+	      msFlex: value,
+	      flex: value
+	    };
+	  },
+	  flexBasis: function flexBasis(value) {
+	    return {
+	      WebkitFlexBasis: value,
+	      flexBasis: value
+	    };
+	  },
+	  justifyContent: function justifyContent(value) {
+	    return {
+	      WebkitJustifyContent: value,
+	      justifyContent: value
+	    };
+	  },
+
+	  transition: function transition(value) {
+	    return {
+	      msTransition: value,
+	      MozTransition: value,
+	      OTransition: value,
+	      WebkitTransition: value,
+	      transition: value
+	    };
+	  },
+
+	  transform: function transform(value) {
+	    return {
+	      msTransform: value,
+	      MozTransform: value,
+	      OTransform: value,
+	      WebkitTransform: value,
+	      transform: value
+	    };
+	  },
+	  absolute: function absolute(value) {
+	    var direction = value && value.split(' ');
+	    return {
+	      position: 'absolute',
+	      top: direction && direction[0],
+	      right: direction && direction[1],
+	      bottom: direction && direction[2],
+	      left: direction && direction[3]
+	    };
+	  },
+	  extend: function extend(name, otherElementStyles) {
+	    var otherStyle = otherElementStyles[name];
+	    if (otherStyle) {
+	      return otherStyle;
+	    }
+	    return {
+	      'extend': name
+	    };
+	  }
+	};
+
+	var autoprefix = exports.autoprefix = function autoprefix(elements) {
+	  var prefixed = {};
+	  (0, _forOwn3.default)(elements, function (styles, element) {
+	    var expanded = {};
+	    (0, _forOwn3.default)(styles, function (value, key) {
+	      var transform = transforms[key];
+	      if (transform) {
+	        expanded = _extends({}, expanded, transform(value));
+	      } else {
+	        expanded[key] = value;
+	      }
+	    });
+	    prefixed[element] = expanded;
+	  });
+	  return prefixed;
+	};
+
+	exports.default = autoprefix;
+	});
+
+	unwrapExports(autoprefix_1);
+	autoprefix_1.autoprefix;
+
+	var hover_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.hover = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var hover = exports.hover = function hover(Component) {
+	  var Span = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'span';
+
+	  return function (_React$Component) {
+	    _inherits(Hover, _React$Component);
+
+	    function Hover() {
+	      var arguments$1 = arguments;
+
+	      var _ref;
+
+	      var _temp, _this, _ret;
+
+	      _classCallCheck(this, Hover);
+
+	      for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	        args[_key] = arguments$1[_key];
+	      }
+
+	      return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref = Hover.__proto__ || Object.getPrototypeOf(Hover)).call.apply(_ref, [this].concat(args))), _this), _this.state = { hover: false }, _this.handleMouseOver = function () {
+	        return _this.setState({ hover: true });
+	      }, _this.handleMouseOut = function () {
+	        return _this.setState({ hover: false });
+	      }, _this.render = function () {
+	        return _react2.default.createElement(
+	          Span,
+	          { onMouseOver: _this.handleMouseOver, onMouseOut: _this.handleMouseOut },
+	          _react2.default.createElement(Component, _extends({}, _this.props, _this.state))
+	        );
+	      }, _temp), _possibleConstructorReturn(_this, _ret);
+	    }
+
+	    return Hover;
+	  }(_react2.default.Component);
+	};
+
+	exports.default = hover;
+	});
+
+	unwrapExports(hover_1);
+	hover_1.hover;
+
+	var active_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.active = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var active = exports.active = function active(Component) {
+	  var Span = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'span';
+
+	  return function (_React$Component) {
+	    _inherits(Active, _React$Component);
+
+	    function Active() {
+	      var arguments$1 = arguments;
+
+	      var _ref;
+
+	      var _temp, _this, _ret;
+
+	      _classCallCheck(this, Active);
+
+	      for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	        args[_key] = arguments$1[_key];
+	      }
+
+	      return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref = Active.__proto__ || Object.getPrototypeOf(Active)).call.apply(_ref, [this].concat(args))), _this), _this.state = { active: false }, _this.handleMouseDown = function () {
+	        return _this.setState({ active: true });
+	      }, _this.handleMouseUp = function () {
+	        return _this.setState({ active: false });
+	      }, _this.render = function () {
+	        return _react2.default.createElement(
+	          Span,
+	          { onMouseDown: _this.handleMouseDown, onMouseUp: _this.handleMouseUp },
+	          _react2.default.createElement(Component, _extends({}, _this.props, _this.state))
+	        );
+	      }, _temp), _possibleConstructorReturn(_this, _ret);
+	    }
+
+	    return Active;
+	  }(_react2.default.Component);
+	};
+
+	exports.default = active;
+	});
+
+	unwrapExports(active_1);
+	active_1.active;
+
+	var loop = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	var loopable = function loopable(i, length) {
+	  var props = {};
+	  var setProp = function setProp(name) {
+	    var value = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+
+	    props[name] = value;
+	  };
+
+	  i === 0 && setProp('first-child');
+	  i === length - 1 && setProp('last-child');
+	  (i === 0 || i % 2 === 0) && setProp('even');
+	  Math.abs(i % 2) === 1 && setProp('odd');
+	  setProp('nth-child', i);
+
+	  return props;
+	};
+
+	exports.default = loopable;
+	});
+
+	unwrapExports(loop);
+
+	var lib = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.ReactCSS = exports.loop = exports.handleActive = exports.handleHover = exports.hover = undefined;
+
+
+
+	var _flattenNames2 = _interopRequireDefault(flattenNames_1);
+
+
+
+	var _mergeClasses2 = _interopRequireDefault(mergeClasses_1);
+
+
+
+	var _autoprefix2 = _interopRequireDefault(autoprefix_1);
+
+
+
+	var _hover3 = _interopRequireDefault(hover_1);
+
+
+
+	var _active2 = _interopRequireDefault(active_1);
+
+
+
+	var _loop3 = _interopRequireDefault(loop);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	exports.hover = _hover3.default;
+	exports.handleHover = _hover3.default;
+	exports.handleActive = _active2.default;
+	exports.loop = _loop3.default;
+	var ReactCSS = exports.ReactCSS = function ReactCSS(classes) {
+	  var arguments$1 = arguments;
+
+	  for (var _len = arguments.length, activations = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+	    activations[_key - 1] = arguments$1[_key];
+	  }
+
+	  var activeNames = (0, _flattenNames2.default)(activations);
+	  var merged = (0, _mergeClasses2.default)(classes, activeNames);
+	  return (0, _autoprefix2.default)(merged);
+	};
+
+	exports.default = ReactCSS;
+	});
+
+	unwrapExports(lib);
+	lib.ReactCSS;
+	lib.loop;
+	lib.handleActive;
+	lib.handleHover;
+	lib.hover;
+
+	var alpha = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.calculateChange = function calculateChange(e, hsl, direction, initialA, container) {
+	  var containerWidth = container.clientWidth;
+	  var containerHeight = container.clientHeight;
+	  var x = typeof e.pageX === 'number' ? e.pageX : e.touches[0].pageX;
+	  var y = typeof e.pageY === 'number' ? e.pageY : e.touches[0].pageY;
+	  var left = x - (container.getBoundingClientRect().left + window.pageXOffset);
+	  var top = y - (container.getBoundingClientRect().top + window.pageYOffset);
+
+	  if (direction === 'vertical') {
+	    var a = void 0;
+	    if (top < 0) {
+	      a = 0;
+	    } else if (top > containerHeight) {
+	      a = 1;
+	    } else {
+	      a = Math.round(top * 100 / containerHeight) / 100;
+	    }
+
+	    if (hsl.a !== a) {
+	      return {
+	        h: hsl.h,
+	        s: hsl.s,
+	        l: hsl.l,
+	        a: a,
+	        source: 'rgb'
+	      };
+	    }
+	  } else {
+	    var _a = void 0;
+	    if (left < 0) {
+	      _a = 0;
+	    } else if (left > containerWidth) {
+	      _a = 1;
+	    } else {
+	      _a = Math.round(left * 100 / containerWidth) / 100;
+	    }
+
+	    if (initialA !== _a) {
+	      return {
+	        h: hsl.h,
+	        s: hsl.s,
+	        l: hsl.l,
+	        a: _a,
+	        source: 'rgb'
+	      };
+	    }
+	  }
+	  return null;
+	};
+	});
+
+	unwrapExports(alpha);
+	alpha.calculateChange;
+
+	var checkboard = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	var checkboardCache = {};
+
+	var render = exports.render = function render(c1, c2, size, serverCanvas) {
+	  if (typeof document === 'undefined' && !serverCanvas) {
+	    return null;
+	  }
+	  var canvas = serverCanvas ? new serverCanvas() : document.createElement('canvas');
+	  canvas.width = size * 2;
+	  canvas.height = size * 2;
+	  var ctx = canvas.getContext('2d');
+	  if (!ctx) {
+	    return null;
+	  } // If no context can be found, return early.
+	  ctx.fillStyle = c1;
+	  ctx.fillRect(0, 0, canvas.width, canvas.height);
+	  ctx.fillStyle = c2;
+	  ctx.fillRect(0, 0, size, size);
+	  ctx.translate(size, size);
+	  ctx.fillRect(0, 0, size, size);
+	  return canvas.toDataURL();
+	};
+
+	exports.get = function get(c1, c2, size, serverCanvas) {
+	  var key = c1 + '-' + c2 + '-' + size + (serverCanvas ? '-server' : '');
+
+	  if (checkboardCache[key]) {
+	    return checkboardCache[key];
+	  }
+
+	  var checkboard = render(c1, c2, size, serverCanvas);
+	  checkboardCache[key] = checkboard;
+	  return checkboard;
+	};
+	});
+
+	unwrapExports(checkboard);
+	checkboard.render;
+	checkboard.get;
+
+	var Checkboard_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Checkboard = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+	var checkboard$1 = _interopRequireWildcard(checkboard);
+
+	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } }
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var Checkboard = exports.Checkboard = function Checkboard(_ref) {
+	  var white = _ref.white,
+	      grey = _ref.grey,
+	      size = _ref.size,
+	      renderers = _ref.renderers,
+	      borderRadius = _ref.borderRadius,
+	      boxShadow = _ref.boxShadow,
+	      children = _ref.children;
+
+	  var styles = (0, _reactcss2.default)({
+	    'default': {
+	      grid: {
+	        borderRadius: borderRadius,
+	        boxShadow: boxShadow,
+	        absolute: '0px 0px 0px 0px',
+	        background: 'url(' + checkboard$1.get(white, grey, size, renderers.canvas) + ') center left'
+	      }
+	    }
+	  });
+	  return (0, react.isValidElement)(children) ? _react2.default.cloneElement(children, _extends({}, children.props, { style: _extends({}, children.props.style, styles.grid) })) : _react2.default.createElement('div', { style: styles.grid });
+	};
+
+	Checkboard.defaultProps = {
+	  size: 8,
+	  white: 'transparent',
+	  grey: 'rgba(0,0,0,.08)',
+	  renderers: {}
+	};
+
+	exports.default = Checkboard;
+	});
+
+	unwrapExports(Checkboard_1);
+	Checkboard_1.Checkboard;
+
+	var Alpha_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Alpha = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+	var alpha$1 = _interopRequireWildcard(alpha);
+
+
+
+	var _Checkboard2 = _interopRequireDefault(Checkboard_1);
+
+	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } }
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var Alpha = exports.Alpha = function (_ref) {
+	  _inherits(Alpha, _ref);
+
+	  function Alpha() {
+	    var arguments$1 = arguments;
+
+	    var _ref2;
+
+	    var _temp, _this, _ret;
+
+	    _classCallCheck(this, Alpha);
+
+	    for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	      args[_key] = arguments$1[_key];
+	    }
+
+	    return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref2 = Alpha.__proto__ || Object.getPrototypeOf(Alpha)).call.apply(_ref2, [this].concat(args))), _this), _this.handleChange = function (e) {
+	      var change = alpha$1.calculateChange(e, _this.props.hsl, _this.props.direction, _this.props.a, _this.container);
+	      change && typeof _this.props.onChange === 'function' && _this.props.onChange(change, e);
+	    }, _this.handleMouseDown = function (e) {
+	      _this.handleChange(e);
+	      window.addEventListener('mousemove', _this.handleChange);
+	      window.addEventListener('mouseup', _this.handleMouseUp);
+	    }, _this.handleMouseUp = function () {
+	      _this.unbindEventListeners();
+	    }, _this.unbindEventListeners = function () {
+	      window.removeEventListener('mousemove', _this.handleChange);
+	      window.removeEventListener('mouseup', _this.handleMouseUp);
+	    }, _temp), _possibleConstructorReturn(_this, _ret);
+	  }
+
+	  _createClass(Alpha, [{
+	    key: 'componentWillUnmount',
+	    value: function componentWillUnmount() {
+	      this.unbindEventListeners();
+	    }
+	  }, {
+	    key: 'render',
+	    value: function render() {
+	      var _this2 = this;
+
+	      var rgb = this.props.rgb;
+	      var styles = (0, _reactcss2.default)({
+	        'default': {
+	          alpha: {
+	            absolute: '0px 0px 0px 0px',
+	            borderRadius: this.props.radius
+	          },
+	          checkboard: {
+	            absolute: '0px 0px 0px 0px',
+	            overflow: 'hidden',
+	            borderRadius: this.props.radius
+	          },
+	          gradient: {
+	            absolute: '0px 0px 0px 0px',
+	            background: 'linear-gradient(to right, rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0) 0%,\n           rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 1) 100%)',
+	            boxShadow: this.props.shadow,
+	            borderRadius: this.props.radius
+	          },
+	          container: {
+	            position: 'relative',
+	            height: '100%',
+	            margin: '0 3px'
+	          },
+	          pointer: {
+	            position: 'absolute',
+	            left: rgb.a * 100 + '%'
+	          },
+	          slider: {
+	            width: '4px',
+	            borderRadius: '1px',
+	            height: '8px',
+	            boxShadow: '0 0 2px rgba(0, 0, 0, .6)',
+	            background: '#fff',
+	            marginTop: '1px',
+	            transform: 'translateX(-2px)'
+	          }
+	        },
+	        'vertical': {
+	          gradient: {
+	            background: 'linear-gradient(to bottom, rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0) 0%,\n           rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 1) 100%)'
+	          },
+	          pointer: {
+	            left: 0,
+	            top: rgb.a * 100 + '%'
+	          }
+	        },
+	        'overwrite': _extends({}, this.props.style)
+	      }, {
+	        vertical: this.props.direction === 'vertical',
+	        overwrite: true
+	      });
+
+	      return _react2.default.createElement(
+	        'div',
+	        { style: styles.alpha },
+	        _react2.default.createElement(
+	          'div',
+	          { style: styles.checkboard },
+	          _react2.default.createElement(_Checkboard2.default, { renderers: this.props.renderers })
+	        ),
+	        _react2.default.createElement('div', { style: styles.gradient }),
+	        _react2.default.createElement(
+	          'div',
+	          {
+	            style: styles.container,
+	            ref: function ref(container) {
+	              return _this2.container = container;
+	            },
+	            onMouseDown: this.handleMouseDown,
+	            onTouchMove: this.handleChange,
+	            onTouchStart: this.handleChange
+	          },
+	          _react2.default.createElement(
+	            'div',
+	            { style: styles.pointer },
+	            this.props.pointer ? _react2.default.createElement(this.props.pointer, this.props) : _react2.default.createElement('div', { style: styles.slider })
+	          )
+	        )
+	      );
+	    }
+	  }]);
+
+	  return Alpha;
+	}(react.PureComponent || react.Component);
+
+	exports.default = Alpha;
+	});
+
+	unwrapExports(Alpha_1);
+	Alpha_1.Alpha;
+
+	var EditableInput_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.EditableInput = undefined;
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var DEFAULT_ARROW_OFFSET = 1;
+
+	var UP_KEY_CODE = 38;
+	var DOWN_KEY_CODE = 40;
+	var VALID_KEY_CODES = [UP_KEY_CODE, DOWN_KEY_CODE];
+	var isValidKeyCode = function isValidKeyCode(keyCode) {
+	  return VALID_KEY_CODES.indexOf(keyCode) > -1;
+	};
+	var getNumberValue = function getNumberValue(value) {
+	  return Number(String(value).replace(/%/g, ''));
+	};
+
+	var idCounter = 1;
+
+	var EditableInput = exports.EditableInput = function (_ref) {
+	  _inherits(EditableInput, _ref);
+
+	  function EditableInput(props) {
+	    _classCallCheck(this, EditableInput);
+
+	    var _this = _possibleConstructorReturn(this, (EditableInput.__proto__ || Object.getPrototypeOf(EditableInput)).call(this));
+
+	    _this.handleBlur = function () {
+	      if (_this.state.blurValue) {
+	        _this.setState({ value: _this.state.blurValue, blurValue: null });
+	      }
+	    };
+
+	    _this.handleChange = function (e) {
+	      _this.setUpdatedValue(e.target.value, e);
+	    };
+
+	    _this.handleKeyDown = function (e) {
+	      // In case `e.target.value` is a percentage remove the `%` character
+	      // and update accordingly with a percentage
+	      // https://github.com/casesandberg/react-color/issues/383
+	      var value = getNumberValue(e.target.value);
+	      if (!isNaN(value) && isValidKeyCode(e.keyCode)) {
+	        var offset = _this.getArrowOffset();
+	        var updatedValue = e.keyCode === UP_KEY_CODE ? value + offset : value - offset;
+
+	        _this.setUpdatedValue(updatedValue, e);
+	      }
+	    };
+
+	    _this.handleDrag = function (e) {
+	      if (_this.props.dragLabel) {
+	        var newValue = Math.round(_this.props.value + e.movementX);
+	        if (newValue >= 0 && newValue <= _this.props.dragMax) {
+	          _this.props.onChange && _this.props.onChange(_this.getValueObjectWithLabel(newValue), e);
+	        }
+	      }
+	    };
+
+	    _this.handleMouseDown = function (e) {
+	      if (_this.props.dragLabel) {
+	        e.preventDefault();
+	        _this.handleDrag(e);
+	        window.addEventListener('mousemove', _this.handleDrag);
+	        window.addEventListener('mouseup', _this.handleMouseUp);
+	      }
+	    };
+
+	    _this.handleMouseUp = function () {
+	      _this.unbindEventListeners();
+	    };
+
+	    _this.unbindEventListeners = function () {
+	      window.removeEventListener('mousemove', _this.handleDrag);
+	      window.removeEventListener('mouseup', _this.handleMouseUp);
+	    };
+
+	    _this.state = {
+	      value: String(props.value).toUpperCase(),
+	      blurValue: String(props.value).toUpperCase()
+	    };
+
+	    _this.inputId = 'rc-editable-input-' + idCounter++;
+	    return _this;
+	  }
+
+	  _createClass(EditableInput, [{
+	    key: 'componentDidUpdate',
+	    value: function componentDidUpdate(prevProps, prevState) {
+	      if (this.props.value !== this.state.value && (prevProps.value !== this.props.value || prevState.value !== this.state.value)) {
+	        if (this.input === document.activeElement) {
+	          this.setState({ blurValue: String(this.props.value).toUpperCase() });
+	        } else {
+	          this.setState({ value: String(this.props.value).toUpperCase(), blurValue: !this.state.blurValue && String(this.props.value).toUpperCase() });
+	        }
+	      }
+	    }
+	  }, {
+	    key: 'componentWillUnmount',
+	    value: function componentWillUnmount() {
+	      this.unbindEventListeners();
+	    }
+	  }, {
+	    key: 'getValueObjectWithLabel',
+	    value: function getValueObjectWithLabel(value) {
+	      return _defineProperty({}, this.props.label, value);
+	    }
+	  }, {
+	    key: 'getArrowOffset',
+	    value: function getArrowOffset() {
+	      return this.props.arrowOffset || DEFAULT_ARROW_OFFSET;
+	    }
+	  }, {
+	    key: 'setUpdatedValue',
+	    value: function setUpdatedValue(value, e) {
+	      var onChangeValue = this.props.label ? this.getValueObjectWithLabel(value) : value;
+	      this.props.onChange && this.props.onChange(onChangeValue, e);
+
+	      this.setState({ value: value });
+	    }
+	  }, {
+	    key: 'render',
+	    value: function render() {
+	      var _this2 = this;
+
+	      var styles = (0, _reactcss2.default)({
+	        'default': {
+	          wrap: {
+	            position: 'relative'
+	          }
+	        },
+	        'user-override': {
+	          wrap: this.props.style && this.props.style.wrap ? this.props.style.wrap : {},
+	          input: this.props.style && this.props.style.input ? this.props.style.input : {},
+	          label: this.props.style && this.props.style.label ? this.props.style.label : {}
+	        },
+	        'dragLabel-true': {
+	          label: {
+	            cursor: 'ew-resize'
+	          }
+	        }
+	      }, {
+	        'user-override': true
+	      }, this.props);
+
+	      return _react2.default.createElement(
+	        'div',
+	        { style: styles.wrap },
+	        _react2.default.createElement('input', {
+	          id: this.inputId,
+	          style: styles.input,
+	          ref: function ref(input) {
+	            return _this2.input = input;
+	          },
+	          value: this.state.value,
+	          onKeyDown: this.handleKeyDown,
+	          onChange: this.handleChange,
+	          onBlur: this.handleBlur,
+	          placeholder: this.props.placeholder,
+	          spellCheck: 'false'
+	        }),
+	        this.props.label && !this.props.hideLabel ? _react2.default.createElement(
+	          'label',
+	          {
+	            htmlFor: this.inputId,
+	            style: styles.label,
+	            onMouseDown: this.handleMouseDown
+	          },
+	          this.props.label
+	        ) : null
+	      );
+	    }
+	  }]);
+
+	  return EditableInput;
+	}(react.PureComponent || react.Component);
+
+	exports.default = EditableInput;
+	});
+
+	unwrapExports(EditableInput_1);
+	EditableInput_1.EditableInput;
+
+	var hue = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.calculateChange = function calculateChange(e, direction, hsl, container) {
+	  var containerWidth = container.clientWidth;
+	  var containerHeight = container.clientHeight;
+	  var x = typeof e.pageX === 'number' ? e.pageX : e.touches[0].pageX;
+	  var y = typeof e.pageY === 'number' ? e.pageY : e.touches[0].pageY;
+	  var left = x - (container.getBoundingClientRect().left + window.pageXOffset);
+	  var top = y - (container.getBoundingClientRect().top + window.pageYOffset);
+
+	  if (direction === 'vertical') {
+	    var h = void 0;
+	    if (top < 0) {
+	      h = 359;
+	    } else if (top > containerHeight) {
+	      h = 0;
+	    } else {
+	      var percent = -(top * 100 / containerHeight) + 100;
+	      h = 360 * percent / 100;
+	    }
+
+	    if (hsl.h !== h) {
+	      return {
+	        h: h,
+	        s: hsl.s,
+	        l: hsl.l,
+	        a: hsl.a,
+	        source: 'hsl'
+	      };
+	    }
+	  } else {
+	    var _h = void 0;
+	    if (left < 0) {
+	      _h = 0;
+	    } else if (left > containerWidth) {
+	      _h = 359;
+	    } else {
+	      var _percent = left * 100 / containerWidth;
+	      _h = 360 * _percent / 100;
+	    }
+
+	    if (hsl.h !== _h) {
+	      return {
+	        h: _h,
+	        s: hsl.s,
+	        l: hsl.l,
+	        a: hsl.a,
+	        source: 'hsl'
+	      };
+	    }
+	  }
+	  return null;
+	};
+	});
+
+	unwrapExports(hue);
+	hue.calculateChange;
+
+	var Hue_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Hue = undefined;
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+	var hue$1 = _interopRequireWildcard(hue);
+
+	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } }
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var Hue = exports.Hue = function (_ref) {
+	  _inherits(Hue, _ref);
+
+	  function Hue() {
+	    var arguments$1 = arguments;
+
+	    var _ref2;
+
+	    var _temp, _this, _ret;
+
+	    _classCallCheck(this, Hue);
+
+	    for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	      args[_key] = arguments$1[_key];
+	    }
+
+	    return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref2 = Hue.__proto__ || Object.getPrototypeOf(Hue)).call.apply(_ref2, [this].concat(args))), _this), _this.handleChange = function (e) {
+	      var change = hue$1.calculateChange(e, _this.props.direction, _this.props.hsl, _this.container);
+	      change && typeof _this.props.onChange === 'function' && _this.props.onChange(change, e);
+	    }, _this.handleMouseDown = function (e) {
+	      _this.handleChange(e);
+	      window.addEventListener('mousemove', _this.handleChange);
+	      window.addEventListener('mouseup', _this.handleMouseUp);
+	    }, _this.handleMouseUp = function () {
+	      _this.unbindEventListeners();
+	    }, _temp), _possibleConstructorReturn(_this, _ret);
+	  }
+
+	  _createClass(Hue, [{
+	    key: 'componentWillUnmount',
+	    value: function componentWillUnmount() {
+	      this.unbindEventListeners();
+	    }
+	  }, {
+	    key: 'unbindEventListeners',
+	    value: function unbindEventListeners() {
+	      window.removeEventListener('mousemove', this.handleChange);
+	      window.removeEventListener('mouseup', this.handleMouseUp);
+	    }
+	  }, {
+	    key: 'render',
+	    value: function render() {
+	      var _this2 = this;
+
+	      var _props$direction = this.props.direction,
+	          direction = _props$direction === undefined ? 'horizontal' : _props$direction;
+
+
+	      var styles = (0, _reactcss2.default)({
+	        'default': {
+	          hue: {
+	            absolute: '0px 0px 0px 0px',
+	            borderRadius: this.props.radius,
+	            boxShadow: this.props.shadow
+	          },
+	          container: {
+	            padding: '0 2px',
+	            position: 'relative',
+	            height: '100%',
+	            borderRadius: this.props.radius
+	          },
+	          pointer: {
+	            position: 'absolute',
+	            left: this.props.hsl.h * 100 / 360 + '%'
+	          },
+	          slider: {
+	            marginTop: '1px',
+	            width: '4px',
+	            borderRadius: '1px',
+	            height: '8px',
+	            boxShadow: '0 0 2px rgba(0, 0, 0, .6)',
+	            background: '#fff',
+	            transform: 'translateX(-2px)'
+	          }
+	        },
+	        'vertical': {
+	          pointer: {
+	            left: '0px',
+	            top: -(this.props.hsl.h * 100 / 360) + 100 + '%'
+	          }
+	        }
+	      }, { vertical: direction === 'vertical' });
+
+	      return _react2.default.createElement(
+	        'div',
+	        { style: styles.hue },
+	        _react2.default.createElement(
+	          'div',
+	          {
+	            className: 'hue-' + direction,
+	            style: styles.container,
+	            ref: function ref(container) {
+	              return _this2.container = container;
+	            },
+	            onMouseDown: this.handleMouseDown,
+	            onTouchMove: this.handleChange,
+	            onTouchStart: this.handleChange
+	          },
+	          _react2.default.createElement(
+	            'style',
+	            null,
+	            '\n            .hue-horizontal {\n              background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0\n                33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);\n              background: -webkit-linear-gradient(to right, #f00 0%, #ff0\n                17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);\n            }\n\n            .hue-vertical {\n              background: linear-gradient(to top, #f00 0%, #ff0 17%, #0f0 33%,\n                #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);\n              background: -webkit-linear-gradient(to top, #f00 0%, #ff0 17%,\n                #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);\n            }\n          '
+	          ),
+	          _react2.default.createElement(
+	            'div',
+	            { style: styles.pointer },
+	            this.props.pointer ? _react2.default.createElement(this.props.pointer, this.props) : _react2.default.createElement('div', { style: styles.slider })
+	          )
+	        )
+	      );
+	    }
+	  }]);
+
+	  return Hue;
+	}(react.PureComponent || react.Component);
+
+	exports.default = Hue;
+	});
+
+	unwrapExports(Hue_1);
+	Hue_1.Hue;
+
+	/**
+	 * This function is like `assignValue` except that it doesn't assign
+	 * `undefined` values.
+	 *
+	 * @private
+	 * @param {Object} object The object to modify.
+	 * @param {string} key The key of the property to assign.
+	 * @param {*} value The value to assign.
+	 */
+	function assignMergeValue(object, key, value) {
+	  if ((value !== undefined && !eq_1(object[key], value)) ||
+	      (value === undefined && !(key in object))) {
+	    _baseAssignValue(object, key, value);
+	  }
+	}
+
+	var _assignMergeValue = assignMergeValue;
+
+	/**
+	 * This method is like `_.isArrayLike` except that it also checks if `value`
+	 * is an object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array-like object,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isArrayLikeObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArrayLikeObject(document.body.children);
+	 * // => true
+	 *
+	 * _.isArrayLikeObject('abc');
+	 * // => false
+	 *
+	 * _.isArrayLikeObject(_.noop);
+	 * // => false
+	 */
+	function isArrayLikeObject(value) {
+	  return isObjectLike_1(value) && isArrayLike_1(value);
+	}
+
+	var isArrayLikeObject_1 = isArrayLikeObject;
+
+	/**
+	 * Gets the value at `key`, unless `key` is "__proto__" or "constructor".
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @param {string} key The key of the property to get.
+	 * @returns {*} Returns the property value.
+	 */
+	function safeGet(object, key) {
+	  if (key === 'constructor' && typeof object[key] === 'function') {
+	    return;
+	  }
+
+	  if (key == '__proto__') {
+	    return;
+	  }
+
+	  return object[key];
+	}
+
+	var _safeGet = safeGet;
+
+	/**
+	 * Converts `value` to a plain object flattening inherited enumerable string
+	 * keyed properties of `value` to own properties of the plain object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.0.0
+	 * @category Lang
+	 * @param {*} value The value to convert.
+	 * @returns {Object} Returns the converted plain object.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.assign({ 'a': 1 }, new Foo);
+	 * // => { 'a': 1, 'b': 2 }
+	 *
+	 * _.assign({ 'a': 1 }, _.toPlainObject(new Foo));
+	 * // => { 'a': 1, 'b': 2, 'c': 3 }
+	 */
+	function toPlainObject(value) {
+	  return _copyObject(value, keysIn_1(value));
+	}
+
+	var toPlainObject_1 = toPlainObject;
+
+	/**
+	 * A specialized version of `baseMerge` for arrays and objects which performs
+	 * deep merges and tracks traversed objects enabling objects with circular
+	 * references to be merged.
+	 *
+	 * @private
+	 * @param {Object} object The destination object.
+	 * @param {Object} source The source object.
+	 * @param {string} key The key of the value to merge.
+	 * @param {number} srcIndex The index of `source`.
+	 * @param {Function} mergeFunc The function to merge values.
+	 * @param {Function} [customizer] The function to customize assigned values.
+	 * @param {Object} [stack] Tracks traversed source values and their merged
+	 *  counterparts.
+	 */
+	function baseMergeDeep(object, source, key, srcIndex, mergeFunc, customizer, stack) {
+	  var objValue = _safeGet(object, key),
+	      srcValue = _safeGet(source, key),
+	      stacked = stack.get(srcValue);
+
+	  if (stacked) {
+	    _assignMergeValue(object, key, stacked);
+	    return;
+	  }
+	  var newValue = customizer
+	    ? customizer(objValue, srcValue, (key + ''), object, source, stack)
+	    : undefined;
+
+	  var isCommon = newValue === undefined;
+
+	  if (isCommon) {
+	    var isArr = isArray_1(srcValue),
+	        isBuff = !isArr && isBuffer_1(srcValue),
+	        isTyped = !isArr && !isBuff && isTypedArray_1(srcValue);
+
+	    newValue = srcValue;
+	    if (isArr || isBuff || isTyped) {
+	      if (isArray_1(objValue)) {
+	        newValue = objValue;
+	      }
+	      else if (isArrayLikeObject_1(objValue)) {
+	        newValue = _copyArray(objValue);
+	      }
+	      else if (isBuff) {
+	        isCommon = false;
+	        newValue = _cloneBuffer(srcValue, true);
+	      }
+	      else if (isTyped) {
+	        isCommon = false;
+	        newValue = _cloneTypedArray(srcValue, true);
+	      }
+	      else {
+	        newValue = [];
+	      }
+	    }
+	    else if (isPlainObject_1(srcValue) || isArguments_1(srcValue)) {
+	      newValue = objValue;
+	      if (isArguments_1(objValue)) {
+	        newValue = toPlainObject_1(objValue);
+	      }
+	      else if (!isObject_1(objValue) || isFunction_1(objValue)) {
+	        newValue = _initCloneObject(srcValue);
+	      }
+	    }
+	    else {
+	      isCommon = false;
+	    }
+	  }
+	  if (isCommon) {
+	    // Recursively merge objects and arrays (susceptible to call stack limits).
+	    stack.set(srcValue, newValue);
+	    mergeFunc(newValue, srcValue, srcIndex, customizer, stack);
+	    stack['delete'](srcValue);
+	  }
+	  _assignMergeValue(object, key, newValue);
+	}
+
+	var _baseMergeDeep = baseMergeDeep;
+
+	/**
+	 * The base implementation of `_.merge` without support for multiple sources.
+	 *
+	 * @private
+	 * @param {Object} object The destination object.
+	 * @param {Object} source The source object.
+	 * @param {number} srcIndex The index of `source`.
+	 * @param {Function} [customizer] The function to customize merged values.
+	 * @param {Object} [stack] Tracks traversed source values and their merged
+	 *  counterparts.
+	 */
+	function baseMerge(object, source, srcIndex, customizer, stack) {
+	  if (object === source) {
+	    return;
+	  }
+	  _baseFor(source, function(srcValue, key) {
+	    stack || (stack = new _Stack);
+	    if (isObject_1(srcValue)) {
+	      _baseMergeDeep(object, source, key, srcIndex, baseMerge, customizer, stack);
+	    }
+	    else {
+	      var newValue = customizer
+	        ? customizer(_safeGet(object, key), srcValue, (key + ''), object, source, stack)
+	        : undefined;
+
+	      if (newValue === undefined) {
+	        newValue = srcValue;
+	      }
+	      _assignMergeValue(object, key, newValue);
+	    }
+	  }, keysIn_1);
+	}
+
+	var _baseMerge = baseMerge;
+
+	/**
+	 * A faster alternative to `Function#apply`, this function invokes `func`
+	 * with the `this` binding of `thisArg` and the arguments of `args`.
+	 *
+	 * @private
+	 * @param {Function} func The function to invoke.
+	 * @param {*} thisArg The `this` binding of `func`.
+	 * @param {Array} args The arguments to invoke `func` with.
+	 * @returns {*} Returns the result of `func`.
+	 */
+	function apply(func, thisArg, args) {
+	  switch (args.length) {
+	    case 0: return func.call(thisArg);
+	    case 1: return func.call(thisArg, args[0]);
+	    case 2: return func.call(thisArg, args[0], args[1]);
+	    case 3: return func.call(thisArg, args[0], args[1], args[2]);
+	  }
+	  return func.apply(thisArg, args);
+	}
+
+	var _apply = apply;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeMax = Math.max;
+
+	/**
+	 * A specialized version of `baseRest` which transforms the rest array.
+	 *
+	 * @private
+	 * @param {Function} func The function to apply a rest parameter to.
+	 * @param {number} [start=func.length-1] The start position of the rest parameter.
+	 * @param {Function} transform The rest array transform.
+	 * @returns {Function} Returns the new function.
+	 */
+	function overRest(func, start, transform) {
+	  start = nativeMax(start === undefined ? (func.length - 1) : start, 0);
+	  return function() {
+	    var args = arguments,
+	        index = -1,
+	        length = nativeMax(args.length - start, 0),
+	        array = Array(length);
+
+	    while (++index < length) {
+	      array[index] = args[start + index];
+	    }
+	    index = -1;
+	    var otherArgs = Array(start + 1);
+	    while (++index < start) {
+	      otherArgs[index] = args[index];
+	    }
+	    otherArgs[start] = transform(array);
+	    return _apply(func, this, otherArgs);
+	  };
+	}
+
+	var _overRest = overRest;
+
+	/**
+	 * Creates a function that returns `value`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 2.4.0
+	 * @category Util
+	 * @param {*} value The value to return from the new function.
+	 * @returns {Function} Returns the new constant function.
+	 * @example
+	 *
+	 * var objects = _.times(2, _.constant({ 'a': 1 }));
+	 *
+	 * console.log(objects);
+	 * // => [{ 'a': 1 }, { 'a': 1 }]
+	 *
+	 * console.log(objects[0] === objects[1]);
+	 * // => true
+	 */
+	function constant$1(value) {
+	  return function() {
+	    return value;
+	  };
+	}
+
+	var constant_1 = constant$1;
+
+	/**
+	 * The base implementation of `setToString` without support for hot loop shorting.
+	 *
+	 * @private
+	 * @param {Function} func The function to modify.
+	 * @param {Function} string The `toString` result.
+	 * @returns {Function} Returns `func`.
+	 */
+	var baseSetToString = !_defineProperty$1 ? identity_1 : function(func, string) {
+	  return _defineProperty$1(func, 'toString', {
+	    'configurable': true,
+	    'enumerable': false,
+	    'value': constant_1(string),
+	    'writable': true
+	  });
+	};
+
+	var _baseSetToString = baseSetToString;
+
+	/** Used to detect hot functions by number of calls within a span of milliseconds. */
+	var HOT_COUNT = 800,
+	    HOT_SPAN = 16;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeNow = Date.now;
+
+	/**
+	 * Creates a function that'll short out and invoke `identity` instead
+	 * of `func` when it's called `HOT_COUNT` or more times in `HOT_SPAN`
+	 * milliseconds.
+	 *
+	 * @private
+	 * @param {Function} func The function to restrict.
+	 * @returns {Function} Returns the new shortable function.
+	 */
+	function shortOut(func) {
+	  var count = 0,
+	      lastCalled = 0;
+
+	  return function() {
+	    var stamp = nativeNow(),
+	        remaining = HOT_SPAN - (stamp - lastCalled);
+
+	    lastCalled = stamp;
+	    if (remaining > 0) {
+	      if (++count >= HOT_COUNT) {
+	        return arguments[0];
+	      }
+	    } else {
+	      count = 0;
+	    }
+	    return func.apply(undefined, arguments);
+	  };
+	}
+
+	var _shortOut = shortOut;
+
+	/**
+	 * Sets the `toString` method of `func` to return `string`.
+	 *
+	 * @private
+	 * @param {Function} func The function to modify.
+	 * @param {Function} string The `toString` result.
+	 * @returns {Function} Returns `func`.
+	 */
+	var setToString = _shortOut(_baseSetToString);
+
+	var _setToString = setToString;
+
+	/**
+	 * The base implementation of `_.rest` which doesn't validate or coerce arguments.
+	 *
+	 * @private
+	 * @param {Function} func The function to apply a rest parameter to.
+	 * @param {number} [start=func.length-1] The start position of the rest parameter.
+	 * @returns {Function} Returns the new function.
+	 */
+	function baseRest(func, start) {
+	  return _setToString(_overRest(func, start, identity_1), func + '');
+	}
+
+	var _baseRest = baseRest;
+
+	/**
+	 * Checks if the given arguments are from an iteratee call.
+	 *
+	 * @private
+	 * @param {*} value The potential iteratee value argument.
+	 * @param {*} index The potential iteratee index or key argument.
+	 * @param {*} object The potential iteratee object argument.
+	 * @returns {boolean} Returns `true` if the arguments are from an iteratee call,
+	 *  else `false`.
+	 */
+	function isIterateeCall(value, index, object) {
+	  if (!isObject_1(object)) {
+	    return false;
+	  }
+	  var type = typeof index;
+	  if (type == 'number'
+	        ? (isArrayLike_1(object) && _isIndex(index, object.length))
+	        : (type == 'string' && index in object)
+	      ) {
+	    return eq_1(object[index], value);
+	  }
+	  return false;
+	}
+
+	var _isIterateeCall = isIterateeCall;
+
+	/**
+	 * Creates a function like `_.assign`.
+	 *
+	 * @private
+	 * @param {Function} assigner The function to assign values.
+	 * @returns {Function} Returns the new assigner function.
+	 */
+	function createAssigner(assigner) {
+	  return _baseRest(function(object, sources) {
+	    var index = -1,
+	        length = sources.length,
+	        customizer = length > 1 ? sources[length - 1] : undefined,
+	        guard = length > 2 ? sources[2] : undefined;
+
+	    customizer = (assigner.length > 3 && typeof customizer == 'function')
+	      ? (length--, customizer)
+	      : undefined;
+
+	    if (guard && _isIterateeCall(sources[0], sources[1], guard)) {
+	      customizer = length < 3 ? undefined : customizer;
+	      length = 1;
+	    }
+	    object = Object(object);
+	    while (++index < length) {
+	      var source = sources[index];
+	      if (source) {
+	        assigner(object, source, index, customizer);
+	      }
+	    }
+	    return object;
 	  });
 	}
 
+	var _createAssigner = createAssigner;
+
+	/**
+	 * This method is like `_.assign` except that it recursively merges own and
+	 * inherited enumerable string keyed properties of source objects into the
+	 * destination object. Source properties that resolve to `undefined` are
+	 * skipped if a destination value exists. Array and plain object properties
+	 * are merged recursively. Other objects and value types are overridden by
+	 * assignment. Source objects are applied from left to right. Subsequent
+	 * sources overwrite property assignments of previous sources.
+	 *
+	 * **Note:** This method mutates `object`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.5.0
+	 * @category Object
+	 * @param {Object} object The destination object.
+	 * @param {...Object} [sources] The source objects.
+	 * @returns {Object} Returns `object`.
+	 * @example
+	 *
+	 * var object = {
+	 *   'a': [{ 'b': 2 }, { 'd': 4 }]
+	 * };
+	 *
+	 * var other = {
+	 *   'a': [{ 'c': 3 }, { 'e': 5 }]
+	 * };
+	 *
+	 * _.merge(object, other);
+	 * // => { 'a': [{ 'b': 2, 'c': 3 }, { 'd': 4, 'e': 5 }] }
+	 */
+	var merge = _createAssigner(function(object, source, srcIndex) {
+	  _baseMerge(object, source, srcIndex);
+	});
+
+	var merge_1 = merge;
+
+	var Raised_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Raised = undefined;
 
 
 
-	var UIExample = /*@__PURE__*/(function (superclass) {
-	  function UIExample(props) {
-	    var this$1 = this;
+	var _react2 = _interopRequireDefault(react);
 
-	    superclass.call(this, props);
 
-	    loadTextures();
 
-	    this.state = {
-	      tab: 'colors',
-	      globeTexture: GLOBE_TEXTURES[0],
-	      cameraVrOrigin: INIT_ORIGIN
-	    };
+	var _propTypes2 = _interopRequireDefault(propTypes);
 
-	    this._onTabClick = function (e) {
-	      this$1.setState({
-	        tab: e.target.id,
-	        selectedColor: null
-	      });
-	    };
-	    this._onSelectColor = function (selectedColor) {
-	      this$1.setState({selectedColor: selectedColor});
-	    };
-	    this._onSelectGlobeTexture = function (globeTexture) {
-	      this$1.setState({globeTexture: globeTexture});
-	    };
-	    this._randomizeGraphData = function () {
-	      this$1.setState({
-	        graphData: GRAPH_COLORS.map(function (color) {
-	          var values = [];
-	          for (var i = GRAPH_POINTS; i--;) {
-	            values[i] = Math.random() * 10 + 5;
-	          }
-	          return {color: color, values: values}
-	        })
-	      });
-	    };
-	    this._onRecenterViewClick = function (e) {
-	      var matrix = e.target.getCameraFacade().threeObject.matrixWorld;
-	      var pos = new Vector3();
-	      var quat = new Quaternion();
-	      var euler = new Euler();
-	      matrix.decompose(pos, quat, new Vector3());
-	      euler.setFromQuaternion(quat);
-	      this$1.setState({
-	        cameraVrOrigin: {
-	          x: pos.x,
-	          y: pos.y,
-	          z: pos.z,
-	          rotateY: euler.y
-	        }
-	      });
-	    };
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+	var _merge2 = _interopRequireDefault(merge_1);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var Raised = exports.Raised = function Raised(_ref) {
+	  var zDepth = _ref.zDepth,
+	      radius = _ref.radius,
+	      background = _ref.background,
+	      children = _ref.children,
+	      _ref$styles = _ref.styles,
+	      passedStyles = _ref$styles === undefined ? {} : _ref$styles;
+
+	  var styles = (0, _reactcss2.default)((0, _merge2.default)({
+	    'default': {
+	      wrap: {
+	        position: 'relative',
+	        display: 'inline-block'
+	      },
+	      content: {
+	        position: 'relative'
+	      },
+	      bg: {
+	        absolute: '0px 0px 0px 0px',
+	        boxShadow: '0 ' + zDepth + 'px ' + zDepth * 4 + 'px rgba(0,0,0,.24)',
+	        borderRadius: radius,
+	        background: background
+	      }
+	    },
+	    'zDepth-0': {
+	      bg: {
+	        boxShadow: 'none'
+	      }
+	    },
+
+	    'zDepth-1': {
+	      bg: {
+	        boxShadow: '0 2px 10px rgba(0,0,0,.12), 0 2px 5px rgba(0,0,0,.16)'
+	      }
+	    },
+	    'zDepth-2': {
+	      bg: {
+	        boxShadow: '0 6px 20px rgba(0,0,0,.19), 0 8px 17px rgba(0,0,0,.2)'
+	      }
+	    },
+	    'zDepth-3': {
+	      bg: {
+	        boxShadow: '0 17px 50px rgba(0,0,0,.19), 0 12px 15px rgba(0,0,0,.24)'
+	      }
+	    },
+	    'zDepth-4': {
+	      bg: {
+	        boxShadow: '0 25px 55px rgba(0,0,0,.21), 0 16px 28px rgba(0,0,0,.22)'
+	      }
+	    },
+	    'zDepth-5': {
+	      bg: {
+	        boxShadow: '0 40px 77px rgba(0,0,0,.22), 0 27px 24px rgba(0,0,0,.2)'
+	      }
+	    },
+	    'square': {
+	      bg: {
+	        borderRadius: '0'
+	      }
+	    },
+	    'circle': {
+	      bg: {
+	        borderRadius: '50%'
+	      }
+	    }
+	  }, passedStyles), { 'zDepth-1': zDepth === 1 });
+
+	  return _react2.default.createElement(
+	    'div',
+	    { style: styles.wrap },
+	    _react2.default.createElement('div', { style: styles.bg }),
+	    _react2.default.createElement(
+	      'div',
+	      { style: styles.content },
+	      children
+	    )
+	  );
+	};
+
+	Raised.propTypes = {
+	  background: _propTypes2.default.string,
+	  zDepth: _propTypes2.default.oneOf([0, 1, 2, 3, 4, 5]),
+	  radius: _propTypes2.default.number,
+	  styles: _propTypes2.default.object
+	};
+
+	Raised.defaultProps = {
+	  background: '#fff',
+	  zDepth: 1,
+	  radius: 2,
+	  styles: {}
+	};
+
+	exports.default = Raised;
+	});
+
+	unwrapExports(Raised_1);
+	Raised_1.Raised;
+
+	/**
+	 * Gets the timestamp of the number of milliseconds that have elapsed since
+	 * the Unix epoch (1 January 1970 00:00:00 UTC).
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 2.4.0
+	 * @category Date
+	 * @returns {number} Returns the timestamp.
+	 * @example
+	 *
+	 * _.defer(function(stamp) {
+	 *   console.log(_.now() - stamp);
+	 * }, _.now());
+	 * // => Logs the number of milliseconds it took for the deferred invocation.
+	 */
+	var now = function() {
+	  return _root.Date.now();
+	};
+
+	var now_1 = now;
+
+	/** Used as references for various `Number` constants. */
+	var NAN$1 = 0 / 0;
+
+	/** Used to match leading and trailing whitespace. */
+	var reTrim$1 = /^\s+|\s+$/g;
+
+	/** Used to detect bad signed hexadecimal string values. */
+	var reIsBadHex$1 = /^[-+]0x[0-9a-f]+$/i;
+
+	/** Used to detect binary string values. */
+	var reIsBinary$1 = /^0b[01]+$/i;
+
+	/** Used to detect octal string values. */
+	var reIsOctal$1 = /^0o[0-7]+$/i;
+
+	/** Built-in method references without a dependency on `root`. */
+	var freeParseInt$1 = parseInt;
+
+	/**
+	 * Converts `value` to a number.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to process.
+	 * @returns {number} Returns the number.
+	 * @example
+	 *
+	 * _.toNumber(3.2);
+	 * // => 3.2
+	 *
+	 * _.toNumber(Number.MIN_VALUE);
+	 * // => 5e-324
+	 *
+	 * _.toNumber(Infinity);
+	 * // => Infinity
+	 *
+	 * _.toNumber('3.2');
+	 * // => 3.2
+	 */
+	function toNumber$1(value) {
+	  if (typeof value == 'number') {
+	    return value;
+	  }
+	  if (isSymbol_1(value)) {
+	    return NAN$1;
+	  }
+	  if (isObject_1(value)) {
+	    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
+	    value = isObject_1(other) ? (other + '') : other;
+	  }
+	  if (typeof value != 'string') {
+	    return value === 0 ? value : +value;
+	  }
+	  value = value.replace(reTrim$1, '');
+	  var isBinary = reIsBinary$1.test(value);
+	  return (isBinary || reIsOctal$1.test(value))
+	    ? freeParseInt$1(value.slice(2), isBinary ? 2 : 8)
+	    : (reIsBadHex$1.test(value) ? NAN$1 : +value);
+	}
+
+	var toNumber_1 = toNumber$1;
+
+	/** Error message constants. */
+	var FUNC_ERROR_TEXT$3 = 'Expected a function';
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeMax$1 = Math.max,
+	    nativeMin = Math.min;
+
+	/**
+	 * Creates a debounced function that delays invoking `func` until after `wait`
+	 * milliseconds have elapsed since the last time the debounced function was
+	 * invoked. The debounced function comes with a `cancel` method to cancel
+	 * delayed `func` invocations and a `flush` method to immediately invoke them.
+	 * Provide `options` to indicate whether `func` should be invoked on the
+	 * leading and/or trailing edge of the `wait` timeout. The `func` is invoked
+	 * with the last arguments provided to the debounced function. Subsequent
+	 * calls to the debounced function return the result of the last `func`
+	 * invocation.
+	 *
+	 * **Note:** If `leading` and `trailing` options are `true`, `func` is
+	 * invoked on the trailing edge of the timeout only if the debounced function
+	 * is invoked more than once during the `wait` timeout.
+	 *
+	 * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
+	 * until to the next tick, similar to `setTimeout` with a timeout of `0`.
+	 *
+	 * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
+	 * for details over the differences between `_.debounce` and `_.throttle`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Function
+	 * @param {Function} func The function to debounce.
+	 * @param {number} [wait=0] The number of milliseconds to delay.
+	 * @param {Object} [options={}] The options object.
+	 * @param {boolean} [options.leading=false]
+	 *  Specify invoking on the leading edge of the timeout.
+	 * @param {number} [options.maxWait]
+	 *  The maximum time `func` is allowed to be delayed before it's invoked.
+	 * @param {boolean} [options.trailing=true]
+	 *  Specify invoking on the trailing edge of the timeout.
+	 * @returns {Function} Returns the new debounced function.
+	 * @example
+	 *
+	 * // Avoid costly calculations while the window size is in flux.
+	 * jQuery(window).on('resize', _.debounce(calculateLayout, 150));
+	 *
+	 * // Invoke `sendMail` when clicked, debouncing subsequent calls.
+	 * jQuery(element).on('click', _.debounce(sendMail, 300, {
+	 *   'leading': true,
+	 *   'trailing': false
+	 * }));
+	 *
+	 * // Ensure `batchLog` is invoked once after 1 second of debounced calls.
+	 * var debounced = _.debounce(batchLog, 250, { 'maxWait': 1000 });
+	 * var source = new EventSource('/stream');
+	 * jQuery(source).on('message', debounced);
+	 *
+	 * // Cancel the trailing debounced invocation.
+	 * jQuery(window).on('popstate', debounced.cancel);
+	 */
+	function debounce(func, wait, options) {
+	  var lastArgs,
+	      lastThis,
+	      maxWait,
+	      result,
+	      timerId,
+	      lastCallTime,
+	      lastInvokeTime = 0,
+	      leading = false,
+	      maxing = false,
+	      trailing = true;
+
+	  if (typeof func != 'function') {
+	    throw new TypeError(FUNC_ERROR_TEXT$3);
+	  }
+	  wait = toNumber_1(wait) || 0;
+	  if (isObject_1(options)) {
+	    leading = !!options.leading;
+	    maxing = 'maxWait' in options;
+	    maxWait = maxing ? nativeMax$1(toNumber_1(options.maxWait) || 0, wait) : maxWait;
+	    trailing = 'trailing' in options ? !!options.trailing : trailing;
 	  }
 
-	  if ( superclass ) UIExample.__proto__ = superclass;
-	  UIExample.prototype = Object.create( superclass && superclass.prototype );
-	  UIExample.prototype.constructor = UIExample;
+	  function invokeFunc(time) {
+	    var args = lastArgs,
+	        thisArg = lastThis;
 
-	  UIExample.prototype.componentDidMount = function componentDidMount () {
-	    this._randomizeGraphData();
+	    lastArgs = lastThis = undefined;
+	    lastInvokeTime = time;
+	    result = func.apply(thisArg, args);
+	    return result;
+	  }
+
+	  function leadingEdge(time) {
+	    // Reset any `maxWait` timer.
+	    lastInvokeTime = time;
+	    // Start the timer for the trailing edge.
+	    timerId = setTimeout(timerExpired, wait);
+	    // Invoke the leading edge.
+	    return leading ? invokeFunc(time) : result;
+	  }
+
+	  function remainingWait(time) {
+	    var timeSinceLastCall = time - lastCallTime,
+	        timeSinceLastInvoke = time - lastInvokeTime,
+	        timeWaiting = wait - timeSinceLastCall;
+
+	    return maxing
+	      ? nativeMin(timeWaiting, maxWait - timeSinceLastInvoke)
+	      : timeWaiting;
+	  }
+
+	  function shouldInvoke(time) {
+	    var timeSinceLastCall = time - lastCallTime,
+	        timeSinceLastInvoke = time - lastInvokeTime;
+
+	    // Either this is the first call, activity has stopped and we're at the
+	    // trailing edge, the system time has gone backwards and we're treating
+	    // it as the trailing edge, or we've hit the `maxWait` limit.
+	    return (lastCallTime === undefined || (timeSinceLastCall >= wait) ||
+	      (timeSinceLastCall < 0) || (maxing && timeSinceLastInvoke >= maxWait));
+	  }
+
+	  function timerExpired() {
+	    var time = now_1();
+	    if (shouldInvoke(time)) {
+	      return trailingEdge(time);
+	    }
+	    // Restart the timer.
+	    timerId = setTimeout(timerExpired, remainingWait(time));
+	  }
+
+	  function trailingEdge(time) {
+	    timerId = undefined;
+
+	    // Only invoke if we have `lastArgs` which means `func` has been
+	    // debounced at least once.
+	    if (trailing && lastArgs) {
+	      return invokeFunc(time);
+	    }
+	    lastArgs = lastThis = undefined;
+	    return result;
+	  }
+
+	  function cancel() {
+	    if (timerId !== undefined) {
+	      clearTimeout(timerId);
+	    }
+	    lastInvokeTime = 0;
+	    lastArgs = lastCallTime = lastThis = timerId = undefined;
+	  }
+
+	  function flush() {
+	    return timerId === undefined ? result : trailingEdge(now_1());
+	  }
+
+	  function debounced() {
+	    var time = now_1(),
+	        isInvoking = shouldInvoke(time);
+
+	    lastArgs = arguments;
+	    lastThis = this;
+	    lastCallTime = time;
+
+	    if (isInvoking) {
+	      if (timerId === undefined) {
+	        return leadingEdge(lastCallTime);
+	      }
+	      if (maxing) {
+	        // Handle invocations in a tight loop.
+	        clearTimeout(timerId);
+	        timerId = setTimeout(timerExpired, wait);
+	        return invokeFunc(lastCallTime);
+	      }
+	    }
+	    if (timerId === undefined) {
+	      timerId = setTimeout(timerExpired, wait);
+	    }
+	    return result;
+	  }
+	  debounced.cancel = cancel;
+	  debounced.flush = flush;
+	  return debounced;
+	}
+
+	var debounce_1 = debounce;
+
+	/** Error message constants. */
+	var FUNC_ERROR_TEXT$4 = 'Expected a function';
+
+	/**
+	 * Creates a throttled function that only invokes `func` at most once per
+	 * every `wait` milliseconds. The throttled function comes with a `cancel`
+	 * method to cancel delayed `func` invocations and a `flush` method to
+	 * immediately invoke them. Provide `options` to indicate whether `func`
+	 * should be invoked on the leading and/or trailing edge of the `wait`
+	 * timeout. The `func` is invoked with the last arguments provided to the
+	 * throttled function. Subsequent calls to the throttled function return the
+	 * result of the last `func` invocation.
+	 *
+	 * **Note:** If `leading` and `trailing` options are `true`, `func` is
+	 * invoked on the trailing edge of the timeout only if the throttled function
+	 * is invoked more than once during the `wait` timeout.
+	 *
+	 * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
+	 * until to the next tick, similar to `setTimeout` with a timeout of `0`.
+	 *
+	 * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
+	 * for details over the differences between `_.throttle` and `_.debounce`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Function
+	 * @param {Function} func The function to throttle.
+	 * @param {number} [wait=0] The number of milliseconds to throttle invocations to.
+	 * @param {Object} [options={}] The options object.
+	 * @param {boolean} [options.leading=true]
+	 *  Specify invoking on the leading edge of the timeout.
+	 * @param {boolean} [options.trailing=true]
+	 *  Specify invoking on the trailing edge of the timeout.
+	 * @returns {Function} Returns the new throttled function.
+	 * @example
+	 *
+	 * // Avoid excessively updating the position while scrolling.
+	 * jQuery(window).on('scroll', _.throttle(updatePosition, 100));
+	 *
+	 * // Invoke `renewToken` when the click event is fired, but not more than once every 5 minutes.
+	 * var throttled = _.throttle(renewToken, 300000, { 'trailing': false });
+	 * jQuery(element).on('click', throttled);
+	 *
+	 * // Cancel the trailing throttled invocation.
+	 * jQuery(window).on('popstate', throttled.cancel);
+	 */
+	function throttle(func, wait, options) {
+	  var leading = true,
+	      trailing = true;
+
+	  if (typeof func != 'function') {
+	    throw new TypeError(FUNC_ERROR_TEXT$4);
+	  }
+	  if (isObject_1(options)) {
+	    leading = 'leading' in options ? !!options.leading : leading;
+	    trailing = 'trailing' in options ? !!options.trailing : trailing;
+	  }
+	  return debounce_1(func, wait, {
+	    'leading': leading,
+	    'maxWait': wait,
+	    'trailing': trailing
+	  });
+	}
+
+	var throttle_1 = throttle;
+
+	var saturation = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.calculateChange = function calculateChange(e, hsl, container) {
+	  var _container$getBoundin = container.getBoundingClientRect(),
+	      containerWidth = _container$getBoundin.width,
+	      containerHeight = _container$getBoundin.height;
+
+	  var x = typeof e.pageX === 'number' ? e.pageX : e.touches[0].pageX;
+	  var y = typeof e.pageY === 'number' ? e.pageY : e.touches[0].pageY;
+	  var left = x - (container.getBoundingClientRect().left + window.pageXOffset);
+	  var top = y - (container.getBoundingClientRect().top + window.pageYOffset);
+
+	  if (left < 0) {
+	    left = 0;
+	  } else if (left > containerWidth) {
+	    left = containerWidth;
+	  }
+
+	  if (top < 0) {
+	    top = 0;
+	  } else if (top > containerHeight) {
+	    top = containerHeight;
+	  }
+
+	  var saturation = left / containerWidth;
+	  var bright = 1 - top / containerHeight;
+
+	  return {
+	    h: hsl.h,
+	    s: saturation,
+	    v: bright,
+	    a: hsl.a,
+	    source: 'hsv'
+	  };
+	};
+	});
+
+	unwrapExports(saturation);
+	saturation.calculateChange;
+
+	var Saturation_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Saturation = undefined;
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+	var _throttle2 = _interopRequireDefault(throttle_1);
+
+
+
+	var saturation$1 = _interopRequireWildcard(saturation);
+
+	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } }
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var Saturation = exports.Saturation = function (_ref) {
+	  _inherits(Saturation, _ref);
+
+	  function Saturation(props) {
+	    _classCallCheck(this, Saturation);
+
+	    var _this = _possibleConstructorReturn(this, (Saturation.__proto__ || Object.getPrototypeOf(Saturation)).call(this, props));
+
+	    _this.handleChange = function (e) {
+	      typeof _this.props.onChange === 'function' && _this.throttle(_this.props.onChange, saturation$1.calculateChange(e, _this.props.hsl, _this.container), e);
+	    };
+
+	    _this.handleMouseDown = function (e) {
+	      _this.handleChange(e);
+	      var renderWindow = _this.getContainerRenderWindow();
+	      renderWindow.addEventListener('mousemove', _this.handleChange);
+	      renderWindow.addEventListener('mouseup', _this.handleMouseUp);
+	    };
+
+	    _this.handleMouseUp = function () {
+	      _this.unbindEventListeners();
+	    };
+
+	    _this.throttle = (0, _throttle2.default)(function (fn, data, e) {
+	      fn(data, e);
+	    }, 50);
+	    return _this;
+	  }
+
+	  _createClass(Saturation, [{
+	    key: 'componentWillUnmount',
+	    value: function componentWillUnmount() {
+	      this.throttle.cancel();
+	      this.unbindEventListeners();
+	    }
+	  }, {
+	    key: 'getContainerRenderWindow',
+	    value: function getContainerRenderWindow() {
+	      var container = this.container;
+
+	      var renderWindow = window;
+	      while (!renderWindow.document.contains(container) && renderWindow.parent !== renderWindow) {
+	        renderWindow = renderWindow.parent;
+	      }
+	      return renderWindow;
+	    }
+	  }, {
+	    key: 'unbindEventListeners',
+	    value: function unbindEventListeners() {
+	      var renderWindow = this.getContainerRenderWindow();
+	      renderWindow.removeEventListener('mousemove', this.handleChange);
+	      renderWindow.removeEventListener('mouseup', this.handleMouseUp);
+	    }
+	  }, {
+	    key: 'render',
+	    value: function render() {
+	      var _this2 = this;
+
+	      var _ref2 = this.props.style || {},
+	          color = _ref2.color,
+	          white = _ref2.white,
+	          black = _ref2.black,
+	          pointer = _ref2.pointer,
+	          circle = _ref2.circle;
+
+	      var styles = (0, _reactcss2.default)({
+	        'default': {
+	          color: {
+	            absolute: '0px 0px 0px 0px',
+	            background: 'hsl(' + this.props.hsl.h + ',100%, 50%)',
+	            borderRadius: this.props.radius
+	          },
+	          white: {
+	            absolute: '0px 0px 0px 0px',
+	            borderRadius: this.props.radius
+	          },
+	          black: {
+	            absolute: '0px 0px 0px 0px',
+	            boxShadow: this.props.shadow,
+	            borderRadius: this.props.radius
+	          },
+	          pointer: {
+	            position: 'absolute',
+	            top: -(this.props.hsv.v * 100) + 100 + '%',
+	            left: this.props.hsv.s * 100 + '%',
+	            cursor: 'default'
+	          },
+	          circle: {
+	            width: '4px',
+	            height: '4px',
+	            boxShadow: '0 0 0 1.5px #fff, inset 0 0 1px 1px rgba(0,0,0,.3),\n            0 0 1px 2px rgba(0,0,0,.4)',
+	            borderRadius: '50%',
+	            cursor: 'hand',
+	            transform: 'translate(-2px, -2px)'
+	          }
+	        },
+	        'custom': {
+	          color: color,
+	          white: white,
+	          black: black,
+	          pointer: pointer,
+	          circle: circle
+	        }
+	      }, { 'custom': !!this.props.style });
+
+	      return _react2.default.createElement(
+	        'div',
+	        {
+	          style: styles.color,
+	          ref: function ref(container) {
+	            return _this2.container = container;
+	          },
+	          onMouseDown: this.handleMouseDown,
+	          onTouchMove: this.handleChange,
+	          onTouchStart: this.handleChange
+	        },
+	        _react2.default.createElement(
+	          'style',
+	          null,
+	          '\n          .saturation-white {\n            background: -webkit-linear-gradient(to right, #fff, rgba(255,255,255,0));\n            background: linear-gradient(to right, #fff, rgba(255,255,255,0));\n          }\n          .saturation-black {\n            background: -webkit-linear-gradient(to top, #000, rgba(0,0,0,0));\n            background: linear-gradient(to top, #000, rgba(0,0,0,0));\n          }\n        '
+	        ),
+	        _react2.default.createElement(
+	          'div',
+	          { style: styles.white, className: 'saturation-white' },
+	          _react2.default.createElement('div', { style: styles.black, className: 'saturation-black' }),
+	          _react2.default.createElement(
+	            'div',
+	            { style: styles.pointer },
+	            this.props.pointer ? _react2.default.createElement(this.props.pointer, this.props) : _react2.default.createElement('div', { style: styles.circle })
+	          )
+	        )
+	      );
+	    }
+	  }]);
+
+	  return Saturation;
+	}(react.PureComponent || react.Component);
+
+	exports.default = Saturation;
+	});
+
+	unwrapExports(Saturation_1);
+	Saturation_1.Saturation;
+
+	/**
+	 * Iterates over elements of `collection` and invokes `iteratee` for each element.
+	 * The iteratee is invoked with three arguments: (value, index|key, collection).
+	 * Iteratee functions may exit iteration early by explicitly returning `false`.
+	 *
+	 * **Note:** As with other "Collections" methods, objects with a "length"
+	 * property are iterated like arrays. To avoid this behavior use `_.forIn`
+	 * or `_.forOwn` for object iteration.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @alias each
+	 * @category Collection
+	 * @param {Array|Object} collection The collection to iterate over.
+	 * @param {Function} [iteratee=_.identity] The function invoked per iteration.
+	 * @returns {Array|Object} Returns `collection`.
+	 * @see _.forEachRight
+	 * @example
+	 *
+	 * _.forEach([1, 2], function(value) {
+	 *   console.log(value);
+	 * });
+	 * // => Logs `1` then `2`.
+	 *
+	 * _.forEach({ 'a': 1, 'b': 2 }, function(value, key) {
+	 *   console.log(key);
+	 * });
+	 * // => Logs 'a' then 'b' (iteration order is not guaranteed).
+	 */
+	function forEach(collection, iteratee) {
+	  var func = isArray_1(collection) ? _arrayEach : _baseEach;
+	  return func(collection, _castFunction(iteratee));
+	}
+
+	var forEach_1 = forEach;
+
+	var each = forEach_1;
+
+	var tinycolor = createCommonjsModule(function (module) {
+	// TinyColor v1.4.2
+	// https://github.com/bgrins/TinyColor
+	// Brian Grinstead, MIT License
+
+	(function(Math) {
+
+	var trimLeft = /^\s+/,
+	    trimRight = /\s+$/,
+	    tinyCounter = 0,
+	    mathRound = Math.round,
+	    mathMin = Math.min,
+	    mathMax = Math.max,
+	    mathRandom = Math.random;
+
+	function tinycolor (color, opts) {
+
+	    color = (color) ? color : '';
+	    opts = opts || { };
+
+	    // If input is already a tinycolor, return itself
+	    if (color instanceof tinycolor) {
+	       return color;
+	    }
+	    // If we are called as a function, call using new instead
+	    if (!(this instanceof tinycolor)) {
+	        return new tinycolor(color, opts);
+	    }
+
+	    var rgb = inputToRGB(color);
+	    this._originalInput = color,
+	    this._r = rgb.r,
+	    this._g = rgb.g,
+	    this._b = rgb.b,
+	    this._a = rgb.a,
+	    this._roundA = mathRound(100*this._a) / 100,
+	    this._format = opts.format || rgb.format;
+	    this._gradientType = opts.gradientType;
+
+	    // Don't let the range of [0,255] come back in [0,1].
+	    // Potentially lose a little bit of precision here, but will fix issues where
+	    // .5 gets interpreted as half of the total, instead of half of 1
+	    // If it was supposed to be 128, this was already taken care of by `inputToRgb`
+	    if (this._r < 1) { this._r = mathRound(this._r); }
+	    if (this._g < 1) { this._g = mathRound(this._g); }
+	    if (this._b < 1) { this._b = mathRound(this._b); }
+
+	    this._ok = rgb.ok;
+	    this._tc_id = tinyCounter++;
+	}
+
+	tinycolor.prototype = {
+	    isDark: function() {
+	        return this.getBrightness() < 128;
+	    },
+	    isLight: function() {
+	        return !this.isDark();
+	    },
+	    isValid: function() {
+	        return this._ok;
+	    },
+	    getOriginalInput: function() {
+	      return this._originalInput;
+	    },
+	    getFormat: function() {
+	        return this._format;
+	    },
+	    getAlpha: function() {
+	        return this._a;
+	    },
+	    getBrightness: function() {
+	        //http://www.w3.org/TR/AERT#color-contrast
+	        var rgb = this.toRgb();
+	        return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+	    },
+	    getLuminance: function() {
+	        //http://www.w3.org/TR/2008/REC-WCAG20-20081211/#relativeluminancedef
+	        var rgb = this.toRgb();
+	        var RsRGB, GsRGB, BsRGB, R, G, B;
+	        RsRGB = rgb.r/255;
+	        GsRGB = rgb.g/255;
+	        BsRGB = rgb.b/255;
+
+	        if (RsRGB <= 0.03928) {R = RsRGB / 12.92;} else {R = Math.pow(((RsRGB + 0.055) / 1.055), 2.4);}
+	        if (GsRGB <= 0.03928) {G = GsRGB / 12.92;} else {G = Math.pow(((GsRGB + 0.055) / 1.055), 2.4);}
+	        if (BsRGB <= 0.03928) {B = BsRGB / 12.92;} else {B = Math.pow(((BsRGB + 0.055) / 1.055), 2.4);}
+	        return (0.2126 * R) + (0.7152 * G) + (0.0722 * B);
+	    },
+	    setAlpha: function(value) {
+	        this._a = boundAlpha(value);
+	        this._roundA = mathRound(100*this._a) / 100;
+	        return this;
+	    },
+	    toHsv: function() {
+	        var hsv = rgbToHsv(this._r, this._g, this._b);
+	        return { h: hsv.h * 360, s: hsv.s, v: hsv.v, a: this._a };
+	    },
+	    toHsvString: function() {
+	        var hsv = rgbToHsv(this._r, this._g, this._b);
+	        var h = mathRound(hsv.h * 360), s = mathRound(hsv.s * 100), v = mathRound(hsv.v * 100);
+	        return (this._a == 1) ?
+	          "hsv("  + h + ", " + s + "%, " + v + "%)" :
+	          "hsva(" + h + ", " + s + "%, " + v + "%, "+ this._roundA + ")";
+	    },
+	    toHsl: function() {
+	        var hsl = rgbToHsl(this._r, this._g, this._b);
+	        return { h: hsl.h * 360, s: hsl.s, l: hsl.l, a: this._a };
+	    },
+	    toHslString: function() {
+	        var hsl = rgbToHsl(this._r, this._g, this._b);
+	        var h = mathRound(hsl.h * 360), s = mathRound(hsl.s * 100), l = mathRound(hsl.l * 100);
+	        return (this._a == 1) ?
+	          "hsl("  + h + ", " + s + "%, " + l + "%)" :
+	          "hsla(" + h + ", " + s + "%, " + l + "%, "+ this._roundA + ")";
+	    },
+	    toHex: function(allow3Char) {
+	        return rgbToHex(this._r, this._g, this._b, allow3Char);
+	    },
+	    toHexString: function(allow3Char) {
+	        return '#' + this.toHex(allow3Char);
+	    },
+	    toHex8: function(allow4Char) {
+	        return rgbaToHex(this._r, this._g, this._b, this._a, allow4Char);
+	    },
+	    toHex8String: function(allow4Char) {
+	        return '#' + this.toHex8(allow4Char);
+	    },
+	    toRgb: function() {
+	        return { r: mathRound(this._r), g: mathRound(this._g), b: mathRound(this._b), a: this._a };
+	    },
+	    toRgbString: function() {
+	        return (this._a == 1) ?
+	          "rgb("  + mathRound(this._r) + ", " + mathRound(this._g) + ", " + mathRound(this._b) + ")" :
+	          "rgba(" + mathRound(this._r) + ", " + mathRound(this._g) + ", " + mathRound(this._b) + ", " + this._roundA + ")";
+	    },
+	    toPercentageRgb: function() {
+	        return { r: mathRound(bound01(this._r, 255) * 100) + "%", g: mathRound(bound01(this._g, 255) * 100) + "%", b: mathRound(bound01(this._b, 255) * 100) + "%", a: this._a };
+	    },
+	    toPercentageRgbString: function() {
+	        return (this._a == 1) ?
+	          "rgb("  + mathRound(bound01(this._r, 255) * 100) + "%, " + mathRound(bound01(this._g, 255) * 100) + "%, " + mathRound(bound01(this._b, 255) * 100) + "%)" :
+	          "rgba(" + mathRound(bound01(this._r, 255) * 100) + "%, " + mathRound(bound01(this._g, 255) * 100) + "%, " + mathRound(bound01(this._b, 255) * 100) + "%, " + this._roundA + ")";
+	    },
+	    toName: function() {
+	        if (this._a === 0) {
+	            return "transparent";
+	        }
+
+	        if (this._a < 1) {
+	            return false;
+	        }
+
+	        return hexNames[rgbToHex(this._r, this._g, this._b, true)] || false;
+	    },
+	    toFilter: function(secondColor) {
+	        var hex8String = '#' + rgbaToArgbHex(this._r, this._g, this._b, this._a);
+	        var secondHex8String = hex8String;
+	        var gradientType = this._gradientType ? "GradientType = 1, " : "";
+
+	        if (secondColor) {
+	            var s = tinycolor(secondColor);
+	            secondHex8String = '#' + rgbaToArgbHex(s._r, s._g, s._b, s._a);
+	        }
+
+	        return "progid:DXImageTransform.Microsoft.gradient("+gradientType+"startColorstr="+hex8String+",endColorstr="+secondHex8String+")";
+	    },
+	    toString: function(format) {
+	        var formatSet = !!format;
+	        format = format || this._format;
+
+	        var formattedString = false;
+	        var hasAlpha = this._a < 1 && this._a >= 0;
+	        var needsAlphaFormat = !formatSet && hasAlpha && (format === "hex" || format === "hex6" || format === "hex3" || format === "hex4" || format === "hex8" || format === "name");
+
+	        if (needsAlphaFormat) {
+	            // Special case for "transparent", all other non-alpha formats
+	            // will return rgba when there is transparency.
+	            if (format === "name" && this._a === 0) {
+	                return this.toName();
+	            }
+	            return this.toRgbString();
+	        }
+	        if (format === "rgb") {
+	            formattedString = this.toRgbString();
+	        }
+	        if (format === "prgb") {
+	            formattedString = this.toPercentageRgbString();
+	        }
+	        if (format === "hex" || format === "hex6") {
+	            formattedString = this.toHexString();
+	        }
+	        if (format === "hex3") {
+	            formattedString = this.toHexString(true);
+	        }
+	        if (format === "hex4") {
+	            formattedString = this.toHex8String(true);
+	        }
+	        if (format === "hex8") {
+	            formattedString = this.toHex8String();
+	        }
+	        if (format === "name") {
+	            formattedString = this.toName();
+	        }
+	        if (format === "hsl") {
+	            formattedString = this.toHslString();
+	        }
+	        if (format === "hsv") {
+	            formattedString = this.toHsvString();
+	        }
+
+	        return formattedString || this.toHexString();
+	    },
+	    clone: function() {
+	        return tinycolor(this.toString());
+	    },
+
+	    _applyModification: function(fn, args) {
+	        var color = fn.apply(null, [this].concat([].slice.call(args)));
+	        this._r = color._r;
+	        this._g = color._g;
+	        this._b = color._b;
+	        this.setAlpha(color._a);
+	        return this;
+	    },
+	    lighten: function() {
+	        return this._applyModification(lighten, arguments);
+	    },
+	    brighten: function() {
+	        return this._applyModification(brighten, arguments);
+	    },
+	    darken: function() {
+	        return this._applyModification(darken, arguments);
+	    },
+	    desaturate: function() {
+	        return this._applyModification(desaturate, arguments);
+	    },
+	    saturate: function() {
+	        return this._applyModification(saturate, arguments);
+	    },
+	    greyscale: function() {
+	        return this._applyModification(greyscale, arguments);
+	    },
+	    spin: function() {
+	        return this._applyModification(spin, arguments);
+	    },
+
+	    _applyCombination: function(fn, args) {
+	        return fn.apply(null, [this].concat([].slice.call(args)));
+	    },
+	    analogous: function() {
+	        return this._applyCombination(analogous, arguments);
+	    },
+	    complement: function() {
+	        return this._applyCombination(complement, arguments);
+	    },
+	    monochromatic: function() {
+	        return this._applyCombination(monochromatic, arguments);
+	    },
+	    splitcomplement: function() {
+	        return this._applyCombination(splitcomplement, arguments);
+	    },
+	    triad: function() {
+	        return this._applyCombination(triad, arguments);
+	    },
+	    tetrad: function() {
+	        return this._applyCombination(tetrad, arguments);
+	    }
+	};
+
+	// If input is an object, force 1 into "1.0" to handle ratios properly
+	// String input requires "1.0" as input, so 1 will be treated as 1
+	tinycolor.fromRatio = function(color, opts) {
+	    if (typeof color == "object") {
+	        var newColor = {};
+	        for (var i in color) {
+	            if (color.hasOwnProperty(i)) {
+	                if (i === "a") {
+	                    newColor[i] = color[i];
+	                }
+	                else {
+	                    newColor[i] = convertToPercentage(color[i]);
+	                }
+	            }
+	        }
+	        color = newColor;
+	    }
+
+	    return tinycolor(color, opts);
+	};
+
+	// Given a string or object, convert that input to RGB
+	// Possible string inputs:
+	//
+	//     "red"
+	//     "#f00" or "f00"
+	//     "#ff0000" or "ff0000"
+	//     "#ff000000" or "ff000000"
+	//     "rgb 255 0 0" or "rgb (255, 0, 0)"
+	//     "rgb 1.0 0 0" or "rgb (1, 0, 0)"
+	//     "rgba (255, 0, 0, 1)" or "rgba 255, 0, 0, 1"
+	//     "rgba (1.0, 0, 0, 1)" or "rgba 1.0, 0, 0, 1"
+	//     "hsl(0, 100%, 50%)" or "hsl 0 100% 50%"
+	//     "hsla(0, 100%, 50%, 1)" or "hsla 0 100% 50%, 1"
+	//     "hsv(0, 100%, 100%)" or "hsv 0 100% 100%"
+	//
+	function inputToRGB(color) {
+
+	    var rgb = { r: 0, g: 0, b: 0 };
+	    var a = 1;
+	    var s = null;
+	    var v = null;
+	    var l = null;
+	    var ok = false;
+	    var format = false;
+
+	    if (typeof color == "string") {
+	        color = stringInputToObject(color);
+	    }
+
+	    if (typeof color == "object") {
+	        if (isValidCSSUnit(color.r) && isValidCSSUnit(color.g) && isValidCSSUnit(color.b)) {
+	            rgb = rgbToRgb(color.r, color.g, color.b);
+	            ok = true;
+	            format = String(color.r).substr(-1) === "%" ? "prgb" : "rgb";
+	        }
+	        else if (isValidCSSUnit(color.h) && isValidCSSUnit(color.s) && isValidCSSUnit(color.v)) {
+	            s = convertToPercentage(color.s);
+	            v = convertToPercentage(color.v);
+	            rgb = hsvToRgb(color.h, s, v);
+	            ok = true;
+	            format = "hsv";
+	        }
+	        else if (isValidCSSUnit(color.h) && isValidCSSUnit(color.s) && isValidCSSUnit(color.l)) {
+	            s = convertToPercentage(color.s);
+	            l = convertToPercentage(color.l);
+	            rgb = hslToRgb(color.h, s, l);
+	            ok = true;
+	            format = "hsl";
+	        }
+
+	        if (color.hasOwnProperty("a")) {
+	            a = color.a;
+	        }
+	    }
+
+	    a = boundAlpha(a);
+
+	    return {
+	        ok: ok,
+	        format: color.format || format,
+	        r: mathMin(255, mathMax(rgb.r, 0)),
+	        g: mathMin(255, mathMax(rgb.g, 0)),
+	        b: mathMin(255, mathMax(rgb.b, 0)),
+	        a: a
+	    };
+	}
+
+
+	// Conversion Functions
+	// --------------------
+
+	// `rgbToHsl`, `rgbToHsv`, `hslToRgb`, `hsvToRgb` modified from:
+	// <http://mjijackson.com/2008/02/rgb-to-hsl-and-rgb-to-hsv-color-model-conversion-algorithms-in-javascript>
+
+	// `rgbToRgb`
+	// Handle bounds / percentage checking to conform to CSS color spec
+	// <http://www.w3.org/TR/css3-color/>
+	// *Assumes:* r, g, b in [0, 255] or [0, 1]
+	// *Returns:* { r, g, b } in [0, 255]
+	function rgbToRgb(r, g, b){
+	    return {
+	        r: bound01(r, 255) * 255,
+	        g: bound01(g, 255) * 255,
+	        b: bound01(b, 255) * 255
+	    };
+	}
+
+	// `rgbToHsl`
+	// Converts an RGB color value to HSL.
+	// *Assumes:* r, g, and b are contained in [0, 255] or [0, 1]
+	// *Returns:* { h, s, l } in [0,1]
+	function rgbToHsl(r, g, b) {
+
+	    r = bound01(r, 255);
+	    g = bound01(g, 255);
+	    b = bound01(b, 255);
+
+	    var max = mathMax(r, g, b), min = mathMin(r, g, b);
+	    var h, s, l = (max + min) / 2;
+
+	    if(max == min) {
+	        h = s = 0; // achromatic
+	    }
+	    else {
+	        var d = max - min;
+	        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+	        switch(max) {
+	            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+	            case g: h = (b - r) / d + 2; break;
+	            case b: h = (r - g) / d + 4; break;
+	        }
+
+	        h /= 6;
+	    }
+
+	    return { h: h, s: s, l: l };
+	}
+
+	// `hslToRgb`
+	// Converts an HSL color value to RGB.
+	// *Assumes:* h is contained in [0, 1] or [0, 360] and s and l are contained [0, 1] or [0, 100]
+	// *Returns:* { r, g, b } in the set [0, 255]
+	function hslToRgb(h, s, l) {
+	    var r, g, b;
+
+	    h = bound01(h, 360);
+	    s = bound01(s, 100);
+	    l = bound01(l, 100);
+
+	    function hue2rgb(p, q, t) {
+	        if(t < 0) { t += 1; }
+	        if(t > 1) { t -= 1; }
+	        if(t < 1/6) { return p + (q - p) * 6 * t; }
+	        if(t < 1/2) { return q; }
+	        if(t < 2/3) { return p + (q - p) * (2/3 - t) * 6; }
+	        return p;
+	    }
+
+	    if(s === 0) {
+	        r = g = b = l; // achromatic
+	    }
+	    else {
+	        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+	        var p = 2 * l - q;
+	        r = hue2rgb(p, q, h + 1/3);
+	        g = hue2rgb(p, q, h);
+	        b = hue2rgb(p, q, h - 1/3);
+	    }
+
+	    return { r: r * 255, g: g * 255, b: b * 255 };
+	}
+
+	// `rgbToHsv`
+	// Converts an RGB color value to HSV
+	// *Assumes:* r, g, and b are contained in the set [0, 255] or [0, 1]
+	// *Returns:* { h, s, v } in [0,1]
+	function rgbToHsv(r, g, b) {
+
+	    r = bound01(r, 255);
+	    g = bound01(g, 255);
+	    b = bound01(b, 255);
+
+	    var max = mathMax(r, g, b), min = mathMin(r, g, b);
+	    var h, s, v = max;
+
+	    var d = max - min;
+	    s = max === 0 ? 0 : d / max;
+
+	    if(max == min) {
+	        h = 0; // achromatic
+	    }
+	    else {
+	        switch(max) {
+	            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+	            case g: h = (b - r) / d + 2; break;
+	            case b: h = (r - g) / d + 4; break;
+	        }
+	        h /= 6;
+	    }
+	    return { h: h, s: s, v: v };
+	}
+
+	// `hsvToRgb`
+	// Converts an HSV color value to RGB.
+	// *Assumes:* h is contained in [0, 1] or [0, 360] and s and v are contained in [0, 1] or [0, 100]
+	// *Returns:* { r, g, b } in the set [0, 255]
+	 function hsvToRgb(h, s, v) {
+
+	    h = bound01(h, 360) * 6;
+	    s = bound01(s, 100);
+	    v = bound01(v, 100);
+
+	    var i = Math.floor(h),
+	        f = h - i,
+	        p = v * (1 - s),
+	        q = v * (1 - f * s),
+	        t = v * (1 - (1 - f) * s),
+	        mod = i % 6,
+	        r = [v, q, p, p, t, v][mod],
+	        g = [t, v, v, q, p, p][mod],
+	        b = [p, p, t, v, v, q][mod];
+
+	    return { r: r * 255, g: g * 255, b: b * 255 };
+	}
+
+	// `rgbToHex`
+	// Converts an RGB color to hex
+	// Assumes r, g, and b are contained in the set [0, 255]
+	// Returns a 3 or 6 character hex
+	function rgbToHex(r, g, b, allow3Char) {
+
+	    var hex = [
+	        pad2(mathRound(r).toString(16)),
+	        pad2(mathRound(g).toString(16)),
+	        pad2(mathRound(b).toString(16))
+	    ];
+
+	    // Return a 3 character hex if possible
+	    if (allow3Char && hex[0].charAt(0) == hex[0].charAt(1) && hex[1].charAt(0) == hex[1].charAt(1) && hex[2].charAt(0) == hex[2].charAt(1)) {
+	        return hex[0].charAt(0) + hex[1].charAt(0) + hex[2].charAt(0);
+	    }
+
+	    return hex.join("");
+	}
+
+	// `rgbaToHex`
+	// Converts an RGBA color plus alpha transparency to hex
+	// Assumes r, g, b are contained in the set [0, 255] and
+	// a in [0, 1]. Returns a 4 or 8 character rgba hex
+	function rgbaToHex(r, g, b, a, allow4Char) {
+
+	    var hex = [
+	        pad2(mathRound(r).toString(16)),
+	        pad2(mathRound(g).toString(16)),
+	        pad2(mathRound(b).toString(16)),
+	        pad2(convertDecimalToHex(a))
+	    ];
+
+	    // Return a 4 character hex if possible
+	    if (allow4Char && hex[0].charAt(0) == hex[0].charAt(1) && hex[1].charAt(0) == hex[1].charAt(1) && hex[2].charAt(0) == hex[2].charAt(1) && hex[3].charAt(0) == hex[3].charAt(1)) {
+	        return hex[0].charAt(0) + hex[1].charAt(0) + hex[2].charAt(0) + hex[3].charAt(0);
+	    }
+
+	    return hex.join("");
+	}
+
+	// `rgbaToArgbHex`
+	// Converts an RGBA color to an ARGB Hex8 string
+	// Rarely used, but required for "toFilter()"
+	function rgbaToArgbHex(r, g, b, a) {
+
+	    var hex = [
+	        pad2(convertDecimalToHex(a)),
+	        pad2(mathRound(r).toString(16)),
+	        pad2(mathRound(g).toString(16)),
+	        pad2(mathRound(b).toString(16))
+	    ];
+
+	    return hex.join("");
+	}
+
+	// `equals`
+	// Can be called with any tinycolor input
+	tinycolor.equals = function (color1, color2) {
+	    if (!color1 || !color2) { return false; }
+	    return tinycolor(color1).toRgbString() == tinycolor(color2).toRgbString();
+	};
+
+	tinycolor.random = function() {
+	    return tinycolor.fromRatio({
+	        r: mathRandom(),
+	        g: mathRandom(),
+	        b: mathRandom()
+	    });
+	};
+
+
+	// Modification Functions
+	// ----------------------
+	// Thanks to less.js for some of the basics here
+	// <https://github.com/cloudhead/less.js/blob/master/lib/less/functions.js>
+
+	function desaturate(color, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 10);
+	    var hsl = tinycolor(color).toHsl();
+	    hsl.s -= amount / 100;
+	    hsl.s = clamp01(hsl.s);
+	    return tinycolor(hsl);
+	}
+
+	function saturate(color, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 10);
+	    var hsl = tinycolor(color).toHsl();
+	    hsl.s += amount / 100;
+	    hsl.s = clamp01(hsl.s);
+	    return tinycolor(hsl);
+	}
+
+	function greyscale(color) {
+	    return tinycolor(color).desaturate(100);
+	}
+
+	function lighten (color, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 10);
+	    var hsl = tinycolor(color).toHsl();
+	    hsl.l += amount / 100;
+	    hsl.l = clamp01(hsl.l);
+	    return tinycolor(hsl);
+	}
+
+	function brighten(color, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 10);
+	    var rgb = tinycolor(color).toRgb();
+	    rgb.r = mathMax(0, mathMin(255, rgb.r - mathRound(255 * - (amount / 100))));
+	    rgb.g = mathMax(0, mathMin(255, rgb.g - mathRound(255 * - (amount / 100))));
+	    rgb.b = mathMax(0, mathMin(255, rgb.b - mathRound(255 * - (amount / 100))));
+	    return tinycolor(rgb);
+	}
+
+	function darken (color, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 10);
+	    var hsl = tinycolor(color).toHsl();
+	    hsl.l -= amount / 100;
+	    hsl.l = clamp01(hsl.l);
+	    return tinycolor(hsl);
+	}
+
+	// Spin takes a positive or negative amount within [-360, 360] indicating the change of hue.
+	// Values outside of this range will be wrapped into this range.
+	function spin(color, amount) {
+	    var hsl = tinycolor(color).toHsl();
+	    var hue = (hsl.h + amount) % 360;
+	    hsl.h = hue < 0 ? 360 + hue : hue;
+	    return tinycolor(hsl);
+	}
+
+	// Combination Functions
+	// ---------------------
+	// Thanks to jQuery xColor for some of the ideas behind these
+	// <https://github.com/infusion/jQuery-xcolor/blob/master/jquery.xcolor.js>
+
+	function complement(color) {
+	    var hsl = tinycolor(color).toHsl();
+	    hsl.h = (hsl.h + 180) % 360;
+	    return tinycolor(hsl);
+	}
+
+	function triad(color) {
+	    var hsl = tinycolor(color).toHsl();
+	    var h = hsl.h;
+	    return [
+	        tinycolor(color),
+	        tinycolor({ h: (h + 120) % 360, s: hsl.s, l: hsl.l }),
+	        tinycolor({ h: (h + 240) % 360, s: hsl.s, l: hsl.l })
+	    ];
+	}
+
+	function tetrad(color) {
+	    var hsl = tinycolor(color).toHsl();
+	    var h = hsl.h;
+	    return [
+	        tinycolor(color),
+	        tinycolor({ h: (h + 90) % 360, s: hsl.s, l: hsl.l }),
+	        tinycolor({ h: (h + 180) % 360, s: hsl.s, l: hsl.l }),
+	        tinycolor({ h: (h + 270) % 360, s: hsl.s, l: hsl.l })
+	    ];
+	}
+
+	function splitcomplement(color) {
+	    var hsl = tinycolor(color).toHsl();
+	    var h = hsl.h;
+	    return [
+	        tinycolor(color),
+	        tinycolor({ h: (h + 72) % 360, s: hsl.s, l: hsl.l}),
+	        tinycolor({ h: (h + 216) % 360, s: hsl.s, l: hsl.l})
+	    ];
+	}
+
+	function analogous(color, results, slices) {
+	    results = results || 6;
+	    slices = slices || 30;
+
+	    var hsl = tinycolor(color).toHsl();
+	    var part = 360 / slices;
+	    var ret = [tinycolor(color)];
+
+	    for (hsl.h = ((hsl.h - (part * results >> 1)) + 720) % 360; --results; ) {
+	        hsl.h = (hsl.h + part) % 360;
+	        ret.push(tinycolor(hsl));
+	    }
+	    return ret;
+	}
+
+	function monochromatic(color, results) {
+	    results = results || 6;
+	    var hsv = tinycolor(color).toHsv();
+	    var h = hsv.h, s = hsv.s, v = hsv.v;
+	    var ret = [];
+	    var modification = 1 / results;
+
+	    while (results--) {
+	        ret.push(tinycolor({ h: h, s: s, v: v}));
+	        v = (v + modification) % 1;
+	    }
+
+	    return ret;
+	}
+
+	// Utility Functions
+	// ---------------------
+
+	tinycolor.mix = function(color1, color2, amount) {
+	    amount = (amount === 0) ? 0 : (amount || 50);
+
+	    var rgb1 = tinycolor(color1).toRgb();
+	    var rgb2 = tinycolor(color2).toRgb();
+
+	    var p = amount / 100;
+
+	    var rgba = {
+	        r: ((rgb2.r - rgb1.r) * p) + rgb1.r,
+	        g: ((rgb2.g - rgb1.g) * p) + rgb1.g,
+	        b: ((rgb2.b - rgb1.b) * p) + rgb1.b,
+	        a: ((rgb2.a - rgb1.a) * p) + rgb1.a
+	    };
+
+	    return tinycolor(rgba);
+	};
+
+
+	// Readability Functions
+	// ---------------------
+	// <http://www.w3.org/TR/2008/REC-WCAG20-20081211/#contrast-ratiodef (WCAG Version 2)
+
+	// `contrast`
+	// Analyze the 2 colors and returns the color contrast defined by (WCAG Version 2)
+	tinycolor.readability = function(color1, color2) {
+	    var c1 = tinycolor(color1);
+	    var c2 = tinycolor(color2);
+	    return (Math.max(c1.getLuminance(),c2.getLuminance())+0.05) / (Math.min(c1.getLuminance(),c2.getLuminance())+0.05);
+	};
+
+	// `isReadable`
+	// Ensure that foreground and background color combinations meet WCAG2 guidelines.
+	// The third argument is an optional Object.
+	//      the 'level' property states 'AA' or 'AAA' - if missing or invalid, it defaults to 'AA';
+	//      the 'size' property states 'large' or 'small' - if missing or invalid, it defaults to 'small'.
+	// If the entire object is absent, isReadable defaults to {level:"AA",size:"small"}.
+
+	// *Example*
+	//    tinycolor.isReadable("#000", "#111") => false
+	//    tinycolor.isReadable("#000", "#111",{level:"AA",size:"large"}) => false
+	tinycolor.isReadable = function(color1, color2, wcag2) {
+	    var readability = tinycolor.readability(color1, color2);
+	    var wcag2Parms, out;
+
+	    out = false;
+
+	    wcag2Parms = validateWCAG2Parms(wcag2);
+	    switch (wcag2Parms.level + wcag2Parms.size) {
+	        case "AAsmall":
+	        case "AAAlarge":
+	            out = readability >= 4.5;
+	            break;
+	        case "AAlarge":
+	            out = readability >= 3;
+	            break;
+	        case "AAAsmall":
+	            out = readability >= 7;
+	            break;
+	    }
+	    return out;
+
+	};
+
+	// `mostReadable`
+	// Given a base color and a list of possible foreground or background
+	// colors for that base, returns the most readable color.
+	// Optionally returns Black or White if the most readable color is unreadable.
+	// *Example*
+	//    tinycolor.mostReadable(tinycolor.mostReadable("#123", ["#124", "#125"],{includeFallbackColors:false}).toHexString(); // "#112255"
+	//    tinycolor.mostReadable(tinycolor.mostReadable("#123", ["#124", "#125"],{includeFallbackColors:true}).toHexString();  // "#ffffff"
+	//    tinycolor.mostReadable("#a8015a", ["#faf3f3"],{includeFallbackColors:true,level:"AAA",size:"large"}).toHexString(); // "#faf3f3"
+	//    tinycolor.mostReadable("#a8015a", ["#faf3f3"],{includeFallbackColors:true,level:"AAA",size:"small"}).toHexString(); // "#ffffff"
+	tinycolor.mostReadable = function(baseColor, colorList, args) {
+	    var bestColor = null;
+	    var bestScore = 0;
+	    var readability;
+	    var includeFallbackColors, level, size ;
+	    args = args || {};
+	    includeFallbackColors = args.includeFallbackColors ;
+	    level = args.level;
+	    size = args.size;
+
+	    for (var i= 0; i < colorList.length ; i++) {
+	        readability = tinycolor.readability(baseColor, colorList[i]);
+	        if (readability > bestScore) {
+	            bestScore = readability;
+	            bestColor = tinycolor(colorList[i]);
+	        }
+	    }
+
+	    if (tinycolor.isReadable(baseColor, bestColor, {"level":level,"size":size}) || !includeFallbackColors) {
+	        return bestColor;
+	    }
+	    else {
+	        args.includeFallbackColors=false;
+	        return tinycolor.mostReadable(baseColor,["#fff", "#000"],args);
+	    }
+	};
+
+
+	// Big List of Colors
+	// ------------------
+	// <http://www.w3.org/TR/css3-color/#svg-color>
+	var names = tinycolor.names = {
+	    aliceblue: "f0f8ff",
+	    antiquewhite: "faebd7",
+	    aqua: "0ff",
+	    aquamarine: "7fffd4",
+	    azure: "f0ffff",
+	    beige: "f5f5dc",
+	    bisque: "ffe4c4",
+	    black: "000",
+	    blanchedalmond: "ffebcd",
+	    blue: "00f",
+	    blueviolet: "8a2be2",
+	    brown: "a52a2a",
+	    burlywood: "deb887",
+	    burntsienna: "ea7e5d",
+	    cadetblue: "5f9ea0",
+	    chartreuse: "7fff00",
+	    chocolate: "d2691e",
+	    coral: "ff7f50",
+	    cornflowerblue: "6495ed",
+	    cornsilk: "fff8dc",
+	    crimson: "dc143c",
+	    cyan: "0ff",
+	    darkblue: "00008b",
+	    darkcyan: "008b8b",
+	    darkgoldenrod: "b8860b",
+	    darkgray: "a9a9a9",
+	    darkgreen: "006400",
+	    darkgrey: "a9a9a9",
+	    darkkhaki: "bdb76b",
+	    darkmagenta: "8b008b",
+	    darkolivegreen: "556b2f",
+	    darkorange: "ff8c00",
+	    darkorchid: "9932cc",
+	    darkred: "8b0000",
+	    darksalmon: "e9967a",
+	    darkseagreen: "8fbc8f",
+	    darkslateblue: "483d8b",
+	    darkslategray: "2f4f4f",
+	    darkslategrey: "2f4f4f",
+	    darkturquoise: "00ced1",
+	    darkviolet: "9400d3",
+	    deeppink: "ff1493",
+	    deepskyblue: "00bfff",
+	    dimgray: "696969",
+	    dimgrey: "696969",
+	    dodgerblue: "1e90ff",
+	    firebrick: "b22222",
+	    floralwhite: "fffaf0",
+	    forestgreen: "228b22",
+	    fuchsia: "f0f",
+	    gainsboro: "dcdcdc",
+	    ghostwhite: "f8f8ff",
+	    gold: "ffd700",
+	    goldenrod: "daa520",
+	    gray: "808080",
+	    green: "008000",
+	    greenyellow: "adff2f",
+	    grey: "808080",
+	    honeydew: "f0fff0",
+	    hotpink: "ff69b4",
+	    indianred: "cd5c5c",
+	    indigo: "4b0082",
+	    ivory: "fffff0",
+	    khaki: "f0e68c",
+	    lavender: "e6e6fa",
+	    lavenderblush: "fff0f5",
+	    lawngreen: "7cfc00",
+	    lemonchiffon: "fffacd",
+	    lightblue: "add8e6",
+	    lightcoral: "f08080",
+	    lightcyan: "e0ffff",
+	    lightgoldenrodyellow: "fafad2",
+	    lightgray: "d3d3d3",
+	    lightgreen: "90ee90",
+	    lightgrey: "d3d3d3",
+	    lightpink: "ffb6c1",
+	    lightsalmon: "ffa07a",
+	    lightseagreen: "20b2aa",
+	    lightskyblue: "87cefa",
+	    lightslategray: "789",
+	    lightslategrey: "789",
+	    lightsteelblue: "b0c4de",
+	    lightyellow: "ffffe0",
+	    lime: "0f0",
+	    limegreen: "32cd32",
+	    linen: "faf0e6",
+	    magenta: "f0f",
+	    maroon: "800000",
+	    mediumaquamarine: "66cdaa",
+	    mediumblue: "0000cd",
+	    mediumorchid: "ba55d3",
+	    mediumpurple: "9370db",
+	    mediumseagreen: "3cb371",
+	    mediumslateblue: "7b68ee",
+	    mediumspringgreen: "00fa9a",
+	    mediumturquoise: "48d1cc",
+	    mediumvioletred: "c71585",
+	    midnightblue: "191970",
+	    mintcream: "f5fffa",
+	    mistyrose: "ffe4e1",
+	    moccasin: "ffe4b5",
+	    navajowhite: "ffdead",
+	    navy: "000080",
+	    oldlace: "fdf5e6",
+	    olive: "808000",
+	    olivedrab: "6b8e23",
+	    orange: "ffa500",
+	    orangered: "ff4500",
+	    orchid: "da70d6",
+	    palegoldenrod: "eee8aa",
+	    palegreen: "98fb98",
+	    paleturquoise: "afeeee",
+	    palevioletred: "db7093",
+	    papayawhip: "ffefd5",
+	    peachpuff: "ffdab9",
+	    peru: "cd853f",
+	    pink: "ffc0cb",
+	    plum: "dda0dd",
+	    powderblue: "b0e0e6",
+	    purple: "800080",
+	    rebeccapurple: "663399",
+	    red: "f00",
+	    rosybrown: "bc8f8f",
+	    royalblue: "4169e1",
+	    saddlebrown: "8b4513",
+	    salmon: "fa8072",
+	    sandybrown: "f4a460",
+	    seagreen: "2e8b57",
+	    seashell: "fff5ee",
+	    sienna: "a0522d",
+	    silver: "c0c0c0",
+	    skyblue: "87ceeb",
+	    slateblue: "6a5acd",
+	    slategray: "708090",
+	    slategrey: "708090",
+	    snow: "fffafa",
+	    springgreen: "00ff7f",
+	    steelblue: "4682b4",
+	    tan: "d2b48c",
+	    teal: "008080",
+	    thistle: "d8bfd8",
+	    tomato: "ff6347",
+	    turquoise: "40e0d0",
+	    violet: "ee82ee",
+	    wheat: "f5deb3",
+	    white: "fff",
+	    whitesmoke: "f5f5f5",
+	    yellow: "ff0",
+	    yellowgreen: "9acd32"
+	};
+
+	// Make it easy to access colors via `hexNames[hex]`
+	var hexNames = tinycolor.hexNames = flip(names);
+
+
+	// Utilities
+	// ---------
+
+	// `{ 'name1': 'val1' }` becomes `{ 'val1': 'name1' }`
+	function flip(o) {
+	    var flipped = { };
+	    for (var i in o) {
+	        if (o.hasOwnProperty(i)) {
+	            flipped[o[i]] = i;
+	        }
+	    }
+	    return flipped;
+	}
+
+	// Return a valid alpha value [0,1] with all invalid values being set to 1
+	function boundAlpha(a) {
+	    a = parseFloat(a);
+
+	    if (isNaN(a) || a < 0 || a > 1) {
+	        a = 1;
+	    }
+
+	    return a;
+	}
+
+	// Take input from [0, n] and return it as [0, 1]
+	function bound01(n, max) {
+	    if (isOnePointZero(n)) { n = "100%"; }
+
+	    var processPercent = isPercentage(n);
+	    n = mathMin(max, mathMax(0, parseFloat(n)));
+
+	    // Automatically convert percentage into number
+	    if (processPercent) {
+	        n = parseInt(n * max, 10) / 100;
+	    }
+
+	    // Handle floating point rounding errors
+	    if ((Math.abs(n - max) < 0.000001)) {
+	        return 1;
+	    }
+
+	    // Convert into [0, 1] range if it isn't already
+	    return (n % max) / parseFloat(max);
+	}
+
+	// Force a number between 0 and 1
+	function clamp01(val) {
+	    return mathMin(1, mathMax(0, val));
+	}
+
+	// Parse a base-16 hex value into a base-10 integer
+	function parseIntFromHex(val) {
+	    return parseInt(val, 16);
+	}
+
+	// Need to handle 1.0 as 100%, since once it is a number, there is no difference between it and 1
+	// <http://stackoverflow.com/questions/7422072/javascript-how-to-detect-number-as-a-decimal-including-1-0>
+	function isOnePointZero(n) {
+	    return typeof n == "string" && n.indexOf('.') != -1 && parseFloat(n) === 1;
+	}
+
+	// Check to see if string passed in is a percentage
+	function isPercentage(n) {
+	    return typeof n === "string" && n.indexOf('%') != -1;
+	}
+
+	// Force a hex value to have 2 characters
+	function pad2(c) {
+	    return c.length == 1 ? '0' + c : '' + c;
+	}
+
+	// Replace a decimal with it's percentage value
+	function convertToPercentage(n) {
+	    if (n <= 1) {
+	        n = (n * 100) + "%";
+	    }
+
+	    return n;
+	}
+
+	// Converts a decimal to a hex value
+	function convertDecimalToHex(d) {
+	    return Math.round(parseFloat(d) * 255).toString(16);
+	}
+	// Converts a hex value to a decimal
+	function convertHexToDecimal(h) {
+	    return (parseIntFromHex(h) / 255);
+	}
+
+	var matchers = (function() {
+
+	    // <http://www.w3.org/TR/css3-values/#integers>
+	    var CSS_INTEGER = "[-\\+]?\\d+%?";
+
+	    // <http://www.w3.org/TR/css3-values/#number-value>
+	    var CSS_NUMBER = "[-\\+]?\\d*\\.\\d+%?";
+
+	    // Allow positive/negative integer/number.  Don't capture the either/or, just the entire outcome.
+	    var CSS_UNIT = "(?:" + CSS_NUMBER + ")|(?:" + CSS_INTEGER + ")";
+
+	    // Actual matching.
+	    // Parentheses and commas are optional, but not required.
+	    // Whitespace can take the place of commas or opening paren
+	    var PERMISSIVE_MATCH3 = "[\\s|\\(]+(" + CSS_UNIT + ")[,|\\s]+(" + CSS_UNIT + ")[,|\\s]+(" + CSS_UNIT + ")\\s*\\)?";
+	    var PERMISSIVE_MATCH4 = "[\\s|\\(]+(" + CSS_UNIT + ")[,|\\s]+(" + CSS_UNIT + ")[,|\\s]+(" + CSS_UNIT + ")[,|\\s]+(" + CSS_UNIT + ")\\s*\\)?";
+
+	    return {
+	        CSS_UNIT: new RegExp(CSS_UNIT),
+	        rgb: new RegExp("rgb" + PERMISSIVE_MATCH3),
+	        rgba: new RegExp("rgba" + PERMISSIVE_MATCH4),
+	        hsl: new RegExp("hsl" + PERMISSIVE_MATCH3),
+	        hsla: new RegExp("hsla" + PERMISSIVE_MATCH4),
+	        hsv: new RegExp("hsv" + PERMISSIVE_MATCH3),
+	        hsva: new RegExp("hsva" + PERMISSIVE_MATCH4),
+	        hex3: /^#?([0-9a-fA-F]{1})([0-9a-fA-F]{1})([0-9a-fA-F]{1})$/,
+	        hex6: /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/,
+	        hex4: /^#?([0-9a-fA-F]{1})([0-9a-fA-F]{1})([0-9a-fA-F]{1})([0-9a-fA-F]{1})$/,
+	        hex8: /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/
+	    };
+	})();
+
+	// `isValidCSSUnit`
+	// Take in a single string / number and check to see if it looks like a CSS unit
+	// (see `matchers` above for definition).
+	function isValidCSSUnit(color) {
+	    return !!matchers.CSS_UNIT.exec(color);
+	}
+
+	// `stringInputToObject`
+	// Permissive string parsing.  Take in a number of formats, and output an object
+	// based on detected format.  Returns `{ r, g, b }` or `{ h, s, l }` or `{ h, s, v}`
+	function stringInputToObject(color) {
+
+	    color = color.replace(trimLeft,'').replace(trimRight, '').toLowerCase();
+	    var named = false;
+	    if (names[color]) {
+	        color = names[color];
+	        named = true;
+	    }
+	    else if (color == 'transparent') {
+	        return { r: 0, g: 0, b: 0, a: 0, format: "name" };
+	    }
+
+	    // Try to match string input using regular expressions.
+	    // Keep most of the number bounding out of this function - don't worry about [0,1] or [0,100] or [0,360]
+	    // Just return an object and let the conversion functions handle that.
+	    // This way the result will be the same whether the tinycolor is initialized with string or object.
+	    var match;
+	    if ((match = matchers.rgb.exec(color))) {
+	        return { r: match[1], g: match[2], b: match[3] };
+	    }
+	    if ((match = matchers.rgba.exec(color))) {
+	        return { r: match[1], g: match[2], b: match[3], a: match[4] };
+	    }
+	    if ((match = matchers.hsl.exec(color))) {
+	        return { h: match[1], s: match[2], l: match[3] };
+	    }
+	    if ((match = matchers.hsla.exec(color))) {
+	        return { h: match[1], s: match[2], l: match[3], a: match[4] };
+	    }
+	    if ((match = matchers.hsv.exec(color))) {
+	        return { h: match[1], s: match[2], v: match[3] };
+	    }
+	    if ((match = matchers.hsva.exec(color))) {
+	        return { h: match[1], s: match[2], v: match[3], a: match[4] };
+	    }
+	    if ((match = matchers.hex8.exec(color))) {
+	        return {
+	            r: parseIntFromHex(match[1]),
+	            g: parseIntFromHex(match[2]),
+	            b: parseIntFromHex(match[3]),
+	            a: convertHexToDecimal(match[4]),
+	            format: named ? "name" : "hex8"
+	        };
+	    }
+	    if ((match = matchers.hex6.exec(color))) {
+	        return {
+	            r: parseIntFromHex(match[1]),
+	            g: parseIntFromHex(match[2]),
+	            b: parseIntFromHex(match[3]),
+	            format: named ? "name" : "hex"
+	        };
+	    }
+	    if ((match = matchers.hex4.exec(color))) {
+	        return {
+	            r: parseIntFromHex(match[1] + '' + match[1]),
+	            g: parseIntFromHex(match[2] + '' + match[2]),
+	            b: parseIntFromHex(match[3] + '' + match[3]),
+	            a: convertHexToDecimal(match[4] + '' + match[4]),
+	            format: named ? "name" : "hex8"
+	        };
+	    }
+	    if ((match = matchers.hex3.exec(color))) {
+	        return {
+	            r: parseIntFromHex(match[1] + '' + match[1]),
+	            g: parseIntFromHex(match[2] + '' + match[2]),
+	            b: parseIntFromHex(match[3] + '' + match[3]),
+	            format: named ? "name" : "hex"
+	        };
+	    }
+
+	    return false;
+	}
+
+	function validateWCAG2Parms(parms) {
+	    // return valid WCAG2 parms for isReadable.
+	    // If input parms are invalid, return {"level":"AA", "size":"small"}
+	    var level, size;
+	    parms = parms || {"level":"AA", "size":"small"};
+	    level = (parms.level || "AA").toUpperCase();
+	    size = (parms.size || "small").toLowerCase();
+	    if (level !== "AA" && level !== "AAA") {
+	        level = "AA";
+	    }
+	    if (size !== "small" && size !== "large") {
+	        size = "small";
+	    }
+	    return {"level":level, "size":size};
+	}
+
+	// Node: Export function
+	if (module.exports) {
+	    module.exports = tinycolor;
+	}
+	// AMD/requirejs: Define the module
+	else {
+	    window.tinycolor = tinycolor;
+	}
+
+	})(Math);
+	});
+
+	var color$1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.isvalidColorString = exports.red = exports.getContrastingColor = exports.isValidHex = exports.toState = exports.simpleCheckForValidColor = undefined;
+
+
+
+	var _each2 = _interopRequireDefault(each);
+
+
+
+	var _tinycolor2 = _interopRequireDefault(tinycolor);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	exports.simpleCheckForValidColor = function simpleCheckForValidColor(data) {
+	  var keysToCheck = ['r', 'g', 'b', 'a', 'h', 's', 'l', 'v'];
+	  var checked = 0;
+	  var passed = 0;
+	  (0, _each2.default)(keysToCheck, function (letter) {
+	    if (data[letter]) {
+	      checked += 1;
+	      if (!isNaN(data[letter])) {
+	        passed += 1;
+	      }
+	      if (letter === 's' || letter === 'l') {
+	        var percentPatt = /^\d+%$/;
+	        if (percentPatt.test(data[letter])) {
+	          passed += 1;
+	        }
+	      }
+	    }
+	  });
+	  return checked === passed ? data : false;
+	};
+
+	var toState = exports.toState = function toState(data, oldHue) {
+	  var color = data.hex ? (0, _tinycolor2.default)(data.hex) : (0, _tinycolor2.default)(data);
+	  var hsl = color.toHsl();
+	  var hsv = color.toHsv();
+	  var rgb = color.toRgb();
+	  var hex = color.toHex();
+	  if (hsl.s === 0) {
+	    hsl.h = oldHue || 0;
+	    hsv.h = oldHue || 0;
+	  }
+	  var transparent = hex === '000000' && rgb.a === 0;
+
+	  return {
+	    hsl: hsl,
+	    hex: transparent ? 'transparent' : '#' + hex,
+	    rgb: rgb,
+	    hsv: hsv,
+	    oldHue: data.h || oldHue || hsl.h,
+	    source: data.source
+	  };
+	};
+
+	exports.isValidHex = function isValidHex(hex) {
+	  if (hex === 'transparent') {
+	    return true;
+	  }
+	  // disable hex4 and hex8
+	  var lh = String(hex).charAt(0) === '#' ? 1 : 0;
+	  return hex.length !== 4 + lh && hex.length < 7 + lh && (0, _tinycolor2.default)(hex).isValid();
+	};
+
+	exports.getContrastingColor = function getContrastingColor(data) {
+	  if (!data) {
+	    return '#fff';
+	  }
+	  var col = toState(data);
+	  if (col.hex === 'transparent') {
+	    return 'rgba(0,0,0,0.4)';
+	  }
+	  var yiq = (col.rgb.r * 299 + col.rgb.g * 587 + col.rgb.b * 114) / 1000;
+	  return yiq >= 128 ? '#000' : '#fff';
+	};
+
+	exports.red = {
+	  hsl: { a: 1, h: 0, l: 0.5, s: 1 },
+	  hex: '#ff0000',
+	  rgb: { r: 255, g: 0, b: 0, a: 1 },
+	  hsv: { h: 0, s: 1, v: 1, a: 1 }
+	};
+
+	exports.isvalidColorString = function isvalidColorString(string, type) {
+	  var stringWithoutDegree = string.replace('°', '');
+	  return (0, _tinycolor2.default)(type + ' (' + stringWithoutDegree + ')')._ok;
+	};
+	});
+
+	var color$2 = unwrapExports(color$1);
+	color$1.isvalidColorString;
+	color$1.red;
+	color$1.getContrastingColor;
+	color$1.isValidHex;
+	color$1.toState;
+	color$1.simpleCheckForValidColor;
+
+	var ColorWrap_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.ColorWrap = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _debounce2 = _interopRequireDefault(debounce_1);
+
+
+
+	var color = _interopRequireWildcard(color$1);
+
+	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } }
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } }
+
+	var ColorWrap = exports.ColorWrap = function ColorWrap(Picker) {
+	  var ColorPicker = function (_ref) {
+	    _inherits(ColorPicker, _ref);
+
+	    function ColorPicker(props) {
+	      _classCallCheck(this, ColorPicker);
+
+	      var _this = _possibleConstructorReturn(this, (ColorPicker.__proto__ || Object.getPrototypeOf(ColorPicker)).call(this));
+
+	      _this.handleChange = function (data, event) {
+	        var isValidColor = color.simpleCheckForValidColor(data);
+	        if (isValidColor) {
+	          var colors = color.toState(data, data.h || _this.state.oldHue);
+	          _this.setState(colors);
+	          _this.props.onChangeComplete && _this.debounce(_this.props.onChangeComplete, colors, event);
+	          _this.props.onChange && _this.props.onChange(colors, event);
+	        }
+	      };
+
+	      _this.handleSwatchHover = function (data, event) {
+	        var isValidColor = color.simpleCheckForValidColor(data);
+	        if (isValidColor) {
+	          var colors = color.toState(data, data.h || _this.state.oldHue);
+	          _this.props.onSwatchHover && _this.props.onSwatchHover(colors, event);
+	        }
+	      };
+
+	      _this.state = _extends({}, color.toState(props.color, 0));
+
+	      _this.debounce = (0, _debounce2.default)(function (fn, data, event) {
+	        fn(data, event);
+	      }, 100);
+	      return _this;
+	    }
+
+	    _createClass(ColorPicker, [{
+	      key: 'render',
+	      value: function render() {
+	        var optionalEvents = {};
+	        if (this.props.onSwatchHover) {
+	          optionalEvents.onSwatchHover = this.handleSwatchHover;
+	        }
+
+	        return _react2.default.createElement(Picker, _extends({}, this.props, this.state, {
+	          onChange: this.handleChange
+	        }, optionalEvents));
+	      }
+	    }], [{
+	      key: 'getDerivedStateFromProps',
+	      value: function getDerivedStateFromProps(nextProps, state) {
+	        return _extends({}, color.toState(nextProps.color, state.oldHue));
+	      }
+	    }]);
+
+	    return ColorPicker;
+	  }(react.PureComponent || react.Component);
+
+	  ColorPicker.propTypes = _extends({}, Picker.propTypes);
+
+	  ColorPicker.defaultProps = _extends({}, Picker.defaultProps, {
+	    color: {
+	      h: 250,
+	      s: 0.50,
+	      l: 0.20,
+	      a: 1
+	    }
+	  });
+
+	  return ColorPicker;
+	};
+
+	exports.default = ColorWrap;
+	});
+
+	unwrapExports(ColorWrap_1);
+	ColorWrap_1.ColorWrap;
+
+	var interaction = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.handleFocus = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) { descriptor.writable = true; } Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) { defineProperties(Constructor.prototype, protoProps); } if (staticProps) { defineProperties(Constructor, staticProps); } return Constructor; }; }();
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) { Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } } /* eslint-disable no-invalid-this */
+
+
+	exports.handleFocus = function handleFocus(Component) {
+	  var Span = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'span';
+	  return function (_React$Component) {
+	    _inherits(Focus, _React$Component);
+
+	    function Focus() {
+	      var arguments$1 = arguments;
+
+	      var _ref;
+
+	      var _temp, _this, _ret;
+
+	      _classCallCheck(this, Focus);
+
+	      for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	        args[_key] = arguments$1[_key];
+	      }
+
+	      return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref = Focus.__proto__ || Object.getPrototypeOf(Focus)).call.apply(_ref, [this].concat(args))), _this), _this.state = { focus: false }, _this.handleFocus = function () {
+	        return _this.setState({ focus: true });
+	      }, _this.handleBlur = function () {
+	        return _this.setState({ focus: false });
+	      }, _temp), _possibleConstructorReturn(_this, _ret);
+	    }
+
+	    _createClass(Focus, [{
+	      key: 'render',
+	      value: function render() {
+	        return _react2.default.createElement(
+	          Span,
+	          { onFocus: this.handleFocus, onBlur: this.handleBlur },
+	          _react2.default.createElement(Component, _extends({}, this.props, this.state))
+	        );
+	      }
+	    }]);
+
+	    return Focus;
+	  }(_react2.default.Component);
+	};
+	});
+
+	unwrapExports(interaction);
+	interaction.handleFocus;
+
+	var Swatch_1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.Swatch = undefined;
+
+	var _extends = Object.assign || function (target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+	var _react2 = _interopRequireDefault(react);
+
+
+
+	var _reactcss2 = _interopRequireDefault(lib);
+
+
+
+
+
+	var _Checkboard2 = _interopRequireDefault(Checkboard_1);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	var ENTER = 13;
+
+	var Swatch = exports.Swatch = function Swatch(_ref) {
+	  var color = _ref.color,
+	      style = _ref.style,
+	      _ref$onClick = _ref.onClick,
+	      onClick = _ref$onClick === undefined ? function () {} : _ref$onClick,
+	      onHover = _ref.onHover,
+	      _ref$title = _ref.title,
+	      title = _ref$title === undefined ? color : _ref$title,
+	      children = _ref.children,
+	      focus = _ref.focus,
+	      _ref$focusStyle = _ref.focusStyle,
+	      focusStyle = _ref$focusStyle === undefined ? {} : _ref$focusStyle;
+
+	  var transparent = color === 'transparent';
+	  var styles = (0, _reactcss2.default)({
+	    default: {
+	      swatch: _extends({
+	        background: color,
+	        height: '100%',
+	        width: '100%',
+	        cursor: 'pointer',
+	        position: 'relative',
+	        outline: 'none'
+	      }, style, focus ? focusStyle : {})
+	    }
+	  });
+
+	  var handleClick = function handleClick(e) {
+	    return onClick(color, e);
+	  };
+	  var handleKeyDown = function handleKeyDown(e) {
+	    return e.keyCode === ENTER && onClick(color, e);
+	  };
+	  var handleHover = function handleHover(e) {
+	    return onHover(color, e);
 	  };
 
-	  UIExample.prototype.render = function render () {
+	  var optionalEvents = {};
+	  if (onHover) {
+	    optionalEvents.onMouseOver = handleHover;
+	  }
+
+	  return _react2.default.createElement(
+	    'div',
+	    _extends({
+	      style: styles.swatch,
+	      onClick: handleClick,
+	      title: title,
+	      tabIndex: 0,
+	      onKeyDown: handleKeyDown
+	    }, optionalEvents),
+	    children,
+	    transparent && _react2.default.createElement(_Checkboard2.default, {
+	      borderRadius: styles.swatch.borderRadius,
+	      boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)'
+	    })
+	  );
+	};
+
+	exports.default = (0, interaction.handleFocus)(Swatch);
+	});
+
+	unwrapExports(Swatch_1);
+	Swatch_1.Swatch;
+
+	var common$1 = createCommonjsModule(function (module, exports) {
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+
+
+
+	Object.defineProperty(exports, 'Alpha', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Alpha_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'Checkboard', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Checkboard_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'EditableInput', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(EditableInput_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'Hue', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Hue_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'Raised', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Raised_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'Saturation', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Saturation_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'ColorWrap', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(ColorWrap_1).default;
+	  }
+	});
+
+
+
+	Object.defineProperty(exports, 'Swatch', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(Swatch_1).default;
+	  }
+	});
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+	});
+
+	unwrapExports(common$1);
+	var common_1 = common$1.EditableInput;
+	var common_2 = common$1.ColorWrap;
+	var common_3 = common$1.Saturation;
+	var common_4 = common$1.Hue;
+
+	function _arrayLikeToArray(arr, len) {
+	  if (len == null || len > arr.length) { len = arr.length; }
+
+	  for (var i = 0, arr2 = new Array(len); i < len; i++) {
+	    arr2[i] = arr[i];
+	  }
+
+	  return arr2;
+	}
+
+	var arrayLikeToArray = _arrayLikeToArray;
+
+	function _arrayWithoutHoles(arr) {
+	  if (Array.isArray(arr)) { return arrayLikeToArray(arr); }
+	}
+
+	var arrayWithoutHoles = _arrayWithoutHoles;
+
+	function _iterableToArray(iter) {
+	  if (typeof Symbol !== "undefined" && Symbol.iterator in Object(iter)) { return Array.from(iter); }
+	}
+
+	var iterableToArray = _iterableToArray;
+
+	function _unsupportedIterableToArray(o, minLen) {
+	  if (!o) { return; }
+	  if (typeof o === "string") { return arrayLikeToArray(o, minLen); }
+	  var n = Object.prototype.toString.call(o).slice(8, -1);
+	  if (n === "Object" && o.constructor) { n = o.constructor.name; }
+	  if (n === "Map" || n === "Set") { return Array.from(o); }
+	  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) { return arrayLikeToArray(o, minLen); }
+	}
+
+	var unsupportedIterableToArray = _unsupportedIterableToArray;
+
+	function _nonIterableSpread() {
+	  throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+	}
+
+	var nonIterableSpread = _nonIterableSpread;
+
+	function _toConsumableArray(arr) {
+	  return arrayWithoutHoles(arr) || iterableToArray(arr) || unsupportedIterableToArray(arr) || nonIterableSpread();
+	}
+
+	var toConsumableArray = _toConsumableArray;
+
+	function _createSuper$9(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$9(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$9() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatString = /*#__PURE__*/function (_Component) {
+	  inherits(DatString, _Component);
+
+	  var _super = _createSuper$9(DatString);
+
+	  function DatString() {
+	    var _this;
+
+	    classCallCheck(this, DatString);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (event) {
+	      var value = event.target.value;
+	      var liveUpdate = _this.props.liveUpdate;
+	      if (liveUpdate) { _this.update(value); }
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleFocus", function () {
+	      document.addEventListener('keydown', _this.handleKeyDown);
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleBlur", function () {
+	      document.removeEventListener('keydown', _this.handleKeyDown);
+	      window.getSelection().removeAllRanges();
+	      var liveUpdate = _this.props.liveUpdate;
+	      if (!liveUpdate) { _this.update(); }
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleKeyDown", function (event) {
+	      var key = event.keyCode || event.which;
+	      var liveUpdate = _this.props.liveUpdate;
+	      if (key === 13 && !liveUpdate) { _this.update(); }
+	    });
+
+	    _this.state = {
+	      value: null
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatString, [{
+	    key: "update",
+	    value: function update(value) {
+	      var _this$props = this.props,
+	          _onUpdateValue = _this$props._onUpdateValue,
+	          onUpdate = _this$props.onUpdate,
+	          path = _this$props.path;
+
+	      _onUpdateValue(path, value);
+
+	      onUpdate(value);
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          path = _this$props2.path,
+	          label = _this$props2.label,
+	          labelWidth = _this$props2.labelWidth,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'string', className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("input", {
+	        style: {
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        },
+	        type: "text",
+	        value: this.state.value,
+	        onChange: this.handleChange,
+	        onFocus: this.handleFocus,
+	        onBlur: this.handleBlur
+	      })));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps, prevState) {
+	      var nextValue = lodash_result(nextProps.data, nextProps.path);
+	      if (prevState.value === nextValue) { return null; }
+	      return {
+	        value: nextValue
+	      };
+	    }
+	  }]);
+
+	  return DatString;
+	}(react_1);
+
+	defineProperty(DatString, "defaultProps", {
+	  className: null,
+	  style: null,
+	  path: null,
+	  label: null,
+	  onUpdate: function onUpdate() {
+	    return null;
+	  }
+	});
+
+	/* eslint-disable no-restricted-globals */
+	function toNumber$2(value) {
+	  var _float = parseFloat(value);
+
+	  return isNaN(_float) ? 0 : _float;
+	}
+	/**
+	 * Polyfill for isInteger.
+	 *
+	 * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isInteger#Polyfill
+	 * @param {number} value
+	 * @return {bool}
+	 */
+
+	var isInteger = Number.isInteger || // eslint-disable-next-line func-names
+	function (value) {
+	  return typeof value === 'number' && isFinite(value) && Math.floor(value) === value;
+	};
+
+	function ownKeys$2(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) { symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); } keys.push.apply(keys, symbols); } return keys; }
+
+	function _objectSpread$2(target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i] != null ? arguments$1[i] : {}; if (i % 2) { ownKeys$2(Object(source), true).forEach(function (key) { defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys$2(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+	function _createSuper$8(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$8(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$8() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var Slider = /*#__PURE__*/function (_Component) {
+	  inherits(Slider, _Component);
+
+	  var _super = _createSuper$8(Slider);
+
+	  function Slider() {
+	    var _this;
+
+	    classCallCheck(this, Slider);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleMouseDown", function (event) {
+	      _this.update(event.pageX);
+
+	      window.addEventListener('mousemove', _this.handleMouseMove);
+	      window.addEventListener('mouseup', _this.handleMouseUp);
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleMouseMove", function (event) {
+	      _this.update(event.pageX);
+
+	      event.preventDefault();
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleMouseUp", function (event) {
+	      _this.update(event.pageX, false);
+
+	      window.removeEventListener('mousemove', _this.handleMouseMove);
+	      window.removeEventListener('mouseup', _this.handleMouseUp);
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleClick", function (event) {
+	      // do not focus input field on slider click
+	      event.preventDefault();
+	    });
+
+	    _this.state = {
+	      value: null
+	    };
+	    _this.sliderRef = /*#__PURE__*/react.createRef();
+	    return _this;
+	  }
+
+	  createClass(Slider, [{
+	    key: "update",
+	    value: function update(pageX) {
+	      var isLive = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+	      var _this$props = this.props,
+	          min = _this$props.min,
+	          max = _this$props.max,
+	          onUpdate = _this$props.onUpdate;
+	      var rect = this.sliderRef.current.getBoundingClientRect();
+	      var x = pageX - rect.left;
+	      var w = rect.right - rect.left;
+	      var value = min + lodash_clamp(x / w, 0, 1) * (max - min);
+	      this.setState({
+	        value: value
+	      }, function () {
+	        onUpdate(value, isLive);
+	      });
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          min = _this$props2.min,
+	          max = _this$props2.max,
+	          width = _this$props2.width,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var value = this.state.value;
+	      var widthBackground = lodash_clamp((value - min) * 100 / (max - min), 0, 100);
+
+	      var sliderStyles = _objectSpread$2({
+	        width: "".concat(width, "%"),
+	        backgroundSize: "".concat(widthBackground, "% 100%")
+	      }, style);
+
+	      return /*#__PURE__*/react.createElement("span", {
+	        ref: this.sliderRef,
+	        className: classnames('slider', className),
+	        style: sliderStyles,
+	        onClick: this.handleClick,
+	        onMouseDown: this.handleMouseDown,
+	        role: "slider",
+	        tabIndex: 0,
+	        "aria-valuenow": value,
+	        "aria-valuemin": min,
+	        "aria-valuemax": max
+	      });
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps, prevState) {
+	      var nextValue = toNumber$2(nextProps.value);
+	      if (prevState.value === nextValue) { return null; }
+	      return {
+	        value: nextValue
+	      };
+	    }
+	  }]);
+
+	  return Slider;
+	}(react_1);
+
+	defineProperty(Slider, "defaultProps", {
+	  className: null,
+	  style: null,
+	  value: null,
+	  min: null,
+	  max: null,
+	  width: null
+	});
+
+	function _createSuper$7(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$7(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$7() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var applyConstraints = function applyConstraints(_ref) {
+	  var value = _ref.value,
+	      min = _ref.min,
+	      max = _ref.max,
+	      step = _ref.step;
+	  var _ref2 = [lodash_isfinite(min), lodash_isfinite(max), lodash_isfinite(step)],
+	      hasMin = _ref2[0],
+	      hasMax = _ref2[1],
+	      hasStep = _ref2[2];
+	  var decimalPlaces = hasStep && !isInteger(step) ? step.toString().split('.')[1].length : 0;
+	  var isMin = false,
+	      isMax = false;
+	  value = toNumber$2(value);
+
+	  if (hasMin && value <= min) {
+	    value = min;
+	    isMin = true;
+	  }
+
+	  if (hasMax && value >= max) {
+	    value = max;
+	    isMax = true;
+	  }
+
+	  if (!isMin && !isMax) {
+	    if (hasStep && step !== 0) {
+	      value = Math.round(value / step) * step;
+	    }
+	  }
+
+	  return value.toFixed(decimalPlaces);
+	};
+
+	var DatNumber = /*#__PURE__*/function (_Component) {
+	  inherits(DatNumber, _Component);
+
+	  var _super = _createSuper$7(DatNumber);
+
+	  function DatNumber() {
+	    var _this;
+
+	    classCallCheck(this, DatNumber);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (event) {
+	      var value = event.target.value;
+
+	      _this.update(value);
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleSliderUpdate", function (value) {
+	      var _this$props = _this.props,
+	          min = _this$props.min,
+	          max = _this$props.max,
+	          step = _this$props.step;
+
+	      _this.update(applyConstraints({
+	        value: value,
+	        min: min,
+	        max: max,
+	        step: step
+	      }));
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "update", function (value) {
+	      var _this$props2 = _this.props,
+	          _onUpdateValue = _this$props2._onUpdateValue,
+	          path = _this$props2.path;
+
+	      _onUpdateValue(path, toNumber$2(value));
+	    });
+
+	    _this.state = {
+	      value: null
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatNumber, [{
+	    key: "renderSlider",
+	    value: function renderSlider(width) {
+	      var _this$props3 = this.props,
+	          min = _this$props3.min,
+	          max = _this$props3.max;
+	      var value = this.state.value;
+	      return /*#__PURE__*/react.createElement(Slider, {
+	        value: value,
+	        min: min,
+	        max: max,
+	        width: width,
+	        onUpdate: this.handleSliderUpdate
+	      });
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var _this$props4 = this.props,
+	          min = _this$props4.min,
+	          max = _this$props4.max,
+	          path = _this$props4.path,
+	          label = _this$props4.label,
+	          labelWidth = _this$props4.labelWidth,
+	          step = _this$props4.step,
+	          disableSlider = _this$props4.disableSlider,
+	          className = _this$props4.className,
+	          style = _this$props4.style;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      var hasSlider = lodash_isfinite(min) && lodash_isfinite(max);
+	      var controlsWidth = 100;
+	      var inputWidth = hasSlider && disableSlider !== true ? Math.round(controlsWidth / 3) : controlsWidth;
+	      var sliderWidth = controlsWidth - inputWidth;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'number', className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("span", {
+	        style: {
+	          display: 'inherit',
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        }
+	      }, hasSlider && disableSlider !== true ? this.renderSlider(sliderWidth) : null, /*#__PURE__*/react.createElement("input", {
+	        type: "number",
+	        step: step,
+	        min: min,
+	        max: max,
+	        inputMode: "numeric",
+	        value: this.state.value,
+	        style: {
+	          width: "".concat(inputWidth, "%")
+	        },
+	        onChange: this.handleChange
+	      }))));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps) {
+	      var min = nextProps.min,
+	          max = nextProps.max,
+	          step = nextProps.step;
+	      var nextValue = applyConstraints({
+	        value: lodash_result(nextProps.data, nextProps.path),
+	        min: min,
+	        max: max,
+	        step: step
+	      });
+	      return {
+	        value: nextValue
+	      };
+	    }
+	  }]);
+
+	  return DatNumber;
+	}(react_1);
+
+	defineProperty(DatNumber, "defaultProps", {
+	  className: null,
+	  style: null,
+	  min: null,
+	  max: null,
+	  step: null,
+	  path: null,
+	  label: null,
+	  disableSlider: null
+	});
+
+	function _createSuper$6(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$6(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$6() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatBoolean = /*#__PURE__*/function (_Component) {
+	  inherits(DatBoolean, _Component);
+
+	  var _super = _createSuper$6(DatBoolean);
+
+	  function DatBoolean(props) {
+	    var _this;
+
+	    classCallCheck(this, DatBoolean);
+
+	    _this = _super.call(this, props);
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (event) {
+	      var value = event.target.checked;
+	      var _this$props = _this.props,
+	          _onUpdateValue = _this$props._onUpdateValue,
+	          path = _this$props.path;
+
+	      _onUpdateValue(path, value);
+	    });
+
+	    _this.state = {
+	      value: null
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatBoolean, [{
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          path = _this$props2.path,
+	          label = _this$props2.label,
+	          labelWidth = _this$props2.labelWidth,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'boolean', className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("span", {
+	        className: "checkbox-container",
+	        style: {
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        }
+	      }, /*#__PURE__*/react.createElement("input", {
+	        type: "checkbox",
+	        checked: this.state.value,
+	        onChange: this.handleChange
+	      }))));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps, prevState) {
+	      var nextValue = lodash_result(nextProps.data, nextProps.path);
+	      if (prevState.value === nextValue) { return null; }
+	      return {
+	        value: nextValue
+	      };
+	    }
+	  }]);
+
+	  return DatBoolean;
+	}(react_1);
+
+	defineProperty(DatBoolean, "defaultProps", {
+	  className: null,
+	  style: null,
+	  path: null,
+	  label: null
+	});
+
+	var DatButton = function DatButton(_ref) {
+	  var label = _ref.label,
+	      onClick = _ref.onClick,
+	      className = _ref.className,
+	      style = _ref.style;
+	  return /*#__PURE__*/react.createElement("li", {
+	    className: classnames('cr', 'button', className),
+	    style: style
+	  }, /*#__PURE__*/react.createElement("span", {
+	    className: "label-text",
+	    onClick: onClick,
+	    onKeyPress: onClick,
+	    role: "button",
+	    tabIndex: 0
+	  }, label));
+	};
+
+	DatButton.defaultProps = {
+	  className: null,
+	  style: null,
+	  label: null
+	};
+
+	function ownKeys$1(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) { symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); } keys.push.apply(keys, symbols); } return keys; }
+
+	function _objectSpread$1(target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i] != null ? arguments$1[i] : {}; if (i % 2) { ownKeys$1(Object(source), true).forEach(function (key) { defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys$1(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+	function _createSuper$5(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$5(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$5() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatFolder = /*#__PURE__*/function (_Component) {
+	  inherits(DatFolder, _Component);
+
+	  var _super = _createSuper$5(DatFolder);
+
+	  function DatFolder(props) {
+	    var _this;
+
+	    classCallCheck(this, DatFolder);
+
+	    _this = _super.call(this, props);
+
+	    defineProperty(assertThisInitialized(_this), "handleClick", function () {
+	      return _this.setState(function (prevState) {
+	        return {
+	          closed: !prevState.closed
+	        };
+	      });
+	    });
+
+	    _this.state = {
+	      closed: props.closed
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatFolder, [{
+	    key: "renderChildren",
+	    value: function renderChildren() {
+	      // Disable this rule to take title out of the props so nested folders can have unique titles.
+	      // eslint-disable-next-line no-unused-vars
+	      var _this$props = this.props,
+	          children = _this$props.children;
+	          _this$props.title;
+	          var rest = objectWithoutProperties(_this$props, ["children", "title"]);
+
+	      return react.Children.map(children, function (child) {
+	        return /*#__PURE__*/react_2(child, _objectSpread$1({}, rest));
+	      });
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var closed = this.state.closed;
+	      var _this$props2 = this.props,
+	          title = _this$props2.title,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('folder', {
+	          closed: closed
+	        }, className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "dg"
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "title",
+	        onClick: this.handleClick,
+	        onKeyPress: this.handleClick,
+	        role: "button",
+	        tabIndex: 0
+	      }, title), /*#__PURE__*/react.createElement("ul", null, this.renderChildren())));
+	    }
+	  }]);
+
+	  return DatFolder;
+	}(react_1);
+
+	defineProperty(DatFolder, "defaultProps", {
+	  className: null,
+	  style: null,
+	  title: 'Folder',
+	  closed: true
+	});
+
+	function _createSuper$4(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$4(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$4() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatSelect = /*#__PURE__*/function (_Component) {
+	  inherits(DatSelect, _Component);
+
+	  var _super = _createSuper$4(DatSelect);
+
+	  function DatSelect() {
+	    var _this;
+
+	    classCallCheck(this, DatSelect);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (event) {
+	      var value = event.target.value;
+	      var _this$props = _this.props,
+	          liveUpdate = _this$props.liveUpdate,
+	          _onUpdateValue = _this$props._onUpdateValue,
+	          onUpdate = _this$props.onUpdate,
+	          path = _this$props.path;
+
+	      _onUpdateValue(path, value);
+
+	      if (liveUpdate) { onUpdate(value); }
+	    });
+
+	    _this.state = {
+	      value: null,
+	      options: null
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatSelect, [{
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          path = _this$props2.path,
+	          label = _this$props2.label,
+	          labelWidth = _this$props2.labelWidth,
+	          optionLabels = _this$props2.optionLabels,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var _this$state = this.state,
+	          value = _this$state.value,
+	          options = _this$state.options;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'select', className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("select", {
+	        value: value,
+	        onChange: this.handleChange,
+	        style: {
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        }
+	      }, options.map(function (item, index) {
+	        return (
+	          /*#__PURE__*/
+	          // eslint-disable-next-line react/no-array-index-key
+	          react.createElement("option", {
+	            key: index,
+	            value: item
+	          }, optionLabels ? optionLabels[index] : item)
+	        );
+	      }))));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps) {
+	      var nextValue = lodash_result(nextProps.data, nextProps.path);
+	      return {
+	        value: nextValue,
+	        options: nextProps.options
+	      };
+	    }
+	  }]);
+
+	  return DatSelect;
+	}(react_1);
+
+	defineProperty(DatSelect, "defaultProps", {
+	  className: null,
+	  style: null,
+	  path: null,
+	  label: null,
+	  optionLabels: null,
+	  onUpdate: function onUpdate() {
+	    return null;
+	  }
+	});
+
+	function _createSuper$3(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$3(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$3() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var Fields = /*#__PURE__*/function (_Component) {
+	  inherits(Fields, _Component);
+
+	  var _super = _createSuper$3(Fields);
+
+	  function Fields() {
+	    var arguments$1 = arguments;
+
+	    var _this;
+
+	    classCallCheck(this, Fields);
+
+	    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+	      args[_key] = arguments$1[_key];
+	    }
+
+	    _this = _super.call.apply(_super, [this].concat(args));
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (value, e) {
+	      var onChange = _this.props.onChange;
+	      if (color$2.isValidHex(value)) { onChange({
+	        hex: value,
+	        source: 'hex'
+	      }, e); }
+	    });
+
+	    return _this;
+	  }
+
+	  createClass(Fields, [{
+	    key: "render",
+	    value: function render() {
+	      var hex = this.props.hex;
+	      return /*#__PURE__*/react.createElement("div", {
+	        className: "flexbox-fix fields-wrap"
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "flexbox-fix fields"
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "field"
+	      }, /*#__PURE__*/react.createElement(common_1, {
+	        value: hex,
+	        onChange: this.handleChange
+	      }))));
+	    }
+	  }]);
+
+	  return Fields;
+	}(react_1);
+
+	var Pointer = function Pointer() {
+	  return /*#__PURE__*/react.createElement("div", {
+	    className: "pointer"
+	  });
+	};
+
+	var PointerCircle = function PointerCircle() {
+	  return /*#__PURE__*/react.createElement("div", {
+	    className: "pointer-circle"
+	  });
+	};
+
+	var Picker = function Picker(_ref) {
+	  var onChange = _ref.onChange,
+	      hsl = _ref.hsl,
+	      hsv = _ref.hsv,
+	      hex = _ref.hex,
+	      _ref$className = _ref.className,
+	      className = _ref$className === void 0 ? '' : _ref$className;
+	  return /*#__PURE__*/react.createElement("div", {
+	    className: "picker ".concat(className)
+	  }, /*#__PURE__*/react.createElement("div", {
+	    className: "saturation-wrap"
+	  }, /*#__PURE__*/react.createElement(common_3, {
+	    className: "saturation",
+	    hsl: hsl,
+	    hsv: hsv,
+	    pointer: PointerCircle,
+	    onChange: onChange
+	  })), /*#__PURE__*/react.createElement("div", {
+	    className: "body"
+	  }, /*#__PURE__*/react.createElement("div", {
+	    className: "controls"
+	  }, /*#__PURE__*/react.createElement("div", {
+	    className: "toggles"
+	  }, /*#__PURE__*/react.createElement("div", {
+	    className: "hue-wrap"
+	  }, /*#__PURE__*/react.createElement(common_4, {
+	    className: "hue",
+	    hsl: hsl,
+	    pointer: Pointer,
+	    onChange: onChange
+	  })))), /*#__PURE__*/react.createElement(Fields, {
+	    hex: hex,
+	    onChange: onChange
+	  })));
+	};
+
+	Picker.defaultProps = {
+	  hsl: null,
+	  hsv: null,
+	  hex: null,
+	  className: null,
+	  disableAlpha: false
+	};
+	var ColorPicker = common_2(Picker);
+
+	function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) { symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); } keys.push.apply(keys, symbols); } return keys; }
+
+	function _objectSpread(target) {
+	var arguments$1 = arguments;
+	 for (var i = 1; i < arguments.length; i++) { var source = arguments$1[i] != null ? arguments$1[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+	function _createSuper$2(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$2(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$2() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatColor = /*#__PURE__*/function (_Component) {
+	  inherits(DatColor, _Component);
+
+	  var _super = _createSuper$2(DatColor);
+
+	  function DatColor() {
+	    var _this;
+
+	    classCallCheck(this, DatColor);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleClickColorPicker", function () {
+	      return _this.setState(function (prevState) {
+	        return _objectSpread(_objectSpread({}, prevState), {}, {
+	          displayColorPicker: !prevState.displayColorPicker
+	        });
+	      });
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleCloseColorPicker", function () {
+	      return _this.setState({
+	        displayColorPicker: false
+	      });
+	    });
+
+	    defineProperty(assertThisInitialized(_this), "handleChangeColor", function (color) {
+	      var value = lodash_isstring(color) ? color : color.hex;
+	      var _this$props = _this.props,
+	          _onUpdateValue = _this$props._onUpdateValue,
+	          path = _this$props.path;
+
+	      _onUpdateValue(path, value);
+	    });
+
+	    _this.state = {
+	      value: null,
+	      displayColorPicker: false
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatColor, [{
+	    key: "renderPicker",
+	    value: function renderPicker() {
+	      var _this$state = this.state,
+	          value = _this$state.value,
+	          displayColorPicker = _this$state.displayColorPicker;
+	      return !displayColorPicker ? null : /*#__PURE__*/react.createElement("div", {
+	        className: "popover"
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "cover",
+	        onClick: this.handleCloseColorPicker,
+	        onKeyPress: this.handleCloseColorPicker,
+	        role: "button",
+	        tabIndex: 0
+	      }), /*#__PURE__*/react.createElement(ColorPicker, {
+	        color: value,
+	        onChange: this.handleChangeColor
+	      }));
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          path = _this$props2.path,
+	          label = _this$props2.label,
+	          labelWidth = _this$props2.labelWidth,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var value = this.state.value;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'color', className),
+	        style: _objectSpread({
+	          borderLeftColor: "".concat(value)
+	        }, style)
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("div", {
+	        style: {
+	          backgroundColor: value,
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        }
+	      }, /*#__PURE__*/react.createElement("div", {
+	        className: "swatch",
+	        onClick: this.handleClickColorPicker,
+	        onKeyPress: this.handleClickColorPicker,
+	        role: "button",
+	        tabIndex: 0
+	      }, value), this.renderPicker())));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps, prevState) {
+	      var nextValue = lodash_result(nextProps.data, nextProps.path);
+	      return _objectSpread(_objectSpread({}, prevState), {}, {
+	        value: nextValue
+	      });
+	    }
+	  }]);
+
+	  return DatColor;
+	}(react_1);
+
+	defineProperty(DatColor, "defaultProps", {
+	  className: null,
+	  style: null,
+	  path: null,
+	  label: null
+	});
+
+	function _createSuper$1(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$1(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$1() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+	var DEFAULT_PRESET_KEY = 'Default';
+
+	var DatPresets = /*#__PURE__*/function (_Component) {
+	  inherits(DatPresets, _Component);
+
+	  var _super = _createSuper$1(DatPresets);
+
+	  function DatPresets() {
+	    var _this;
+
+	    classCallCheck(this, DatPresets);
+
+	    _this = _super.call(this);
+
+	    defineProperty(assertThisInitialized(_this), "handleChange", function (event) {
+	      var value = JSON.parse(event.target.value);
+	      var _this$props = _this.props,
+	          liveUpdate = _this$props.liveUpdate,
+	          onUpdate = _this$props.onUpdate;
+	      if (liveUpdate) { onUpdate(value); }
+	    });
+
+	    _this.state = {
+	      defaultPreset: null,
+	      options: null
+	    };
+	    return _this;
+	  }
+
+	  createClass(DatPresets, [{
+	    key: "render",
+	    value: function render() {
+	      var _this$props2 = this.props,
+	          path = _this$props2.path,
+	          label = _this$props2.label,
+	          labelWidth = _this$props2.labelWidth,
+	          className = _this$props2.className,
+	          style = _this$props2.style;
+	      var options = this.state.options;
+	      var labelText = lodash_isstring(label) ? label : path;
+	      return /*#__PURE__*/react.createElement("li", {
+	        className: classnames('cr', 'presets', className),
+	        style: style
+	      }, /*#__PURE__*/react.createElement("label", null, /*#__PURE__*/react.createElement("span", {
+	        className: "label-text",
+	        style: {
+	          width: labelWidth
+	        }
+	      }, labelText), /*#__PURE__*/react.createElement("select", {
+	        onChange: this.handleChange,
+	        style: {
+	          width: "calc(100% - ".concat(labelWidth, ")")
+	        }
+	      }, options.map(function (preset) {
+	        return Object.keys(preset).map(function (key) {
+	          return /*#__PURE__*/react.createElement("option", {
+	            key: key,
+	            value: JSON.stringify(preset[key])
+	          }, key);
+	        });
+	      }))));
+	    }
+	  }], [{
+	    key: "getDerivedStateFromProps",
+	    value: function getDerivedStateFromProps(nextProps, prevState) {
+	      var nextValue = lodash_clonedeep(nextProps.data);
+	      var defaultPreset = prevState.defaultPreset ? prevState.defaultPreset : nextValue;
+	      return {
+	        defaultPreset: defaultPreset,
+	        options: [defineProperty({}, DEFAULT_PRESET_KEY, defaultPreset)].concat(toConsumableArray(nextProps.options.filter(function (preset) {
+	          return Object.keys(preset)[0] !== DEFAULT_PRESET_KEY;
+	        })))
+	      };
+	    }
+	  }]);
+
+	  return DatPresets;
+	}(react_1);
+
+	defineProperty(DatPresets, "defaultProps", {
+	  className: null,
+	  style: null,
+	  path: null
+	});
+
+	function _createSuper(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct(); return function _createSuperInternal() { var Super = getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct() { if (typeof Reflect === "undefined" || !Reflect.construct) { return false; } if (Reflect.construct.sham) { return false; } if (typeof Proxy === "function") { return true; } try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+
+	var DatGui = /*#__PURE__*/function (_Component) {
+	  inherits(DatGui, _Component);
+
+	  var _super = _createSuper(DatGui);
+
+	  function DatGui() {
+	    var arguments$1 = arguments;
+
+	    var _this;
+
+	    classCallCheck(this, DatGui);
+
+	    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+	      args[_key] = arguments$1[_key];
+	    }
+
+	    _this = _super.call.apply(_super, [this].concat(args));
+
+	    defineProperty(assertThisInitialized(_this), "handleUpdateValue", function (path, value) {
+	      var _this$props = _this.props,
+	          data = _this$props.data,
+	          onUpdate = _this$props.onUpdate;
+	      var dataUpdated = lodash_set(lodash_clonedeep(data), path, value);
+	      onUpdate(dataUpdated);
+	    });
+
+	    return _this;
+	  }
+
+	  createClass(DatGui, [{
+	    key: "renderChildren",
+	    value: function renderChildren() {
+	      var _this2 = this;
+
+	      var _this$props2 = this.props,
+	          children = _this$props2.children,
+	          data = _this$props2.data;
+	      return react.Children.toArray(children).map(function (child, i) {
+	        var liveUpdate = lodash_isundefined(child.props.liveUpdate) ? _this2.props.liveUpdate : child.props.liveUpdate;
+	        var labelWidth = lodash_isundefined(child.props.labelWidth) ? _this2.props.labelWidth : child.props.labelWidth;
+	        return /*#__PURE__*/react_2(child, {
+	          key: i,
+	          data: data,
+	          liveUpdate: liveUpdate,
+	          labelWidth: labelWidth,
+	          _onUpdateValue: _this2.handleUpdateValue
+	        });
+	      });
+	    }
+	  }, {
+	    key: "render",
+	    value: function render() {
+	      var _this$props3 = this.props,
+	          style = _this$props3.style,
+	          className = _this$props3.className;
+	      var classNames = classnames('react-dat-gui', className);
+	      return /*#__PURE__*/react.createElement("div", {
+	        className: classNames,
+	        style: style
+	      }, /*#__PURE__*/react.createElement("ul", {
+	        className: "dg main"
+	      }, this.renderChildren()));
+	    }
+	  }]);
+
+	  return DatGui;
+	}(react_1);
+
+	defineProperty(DatGui, "defaultProps", {
+	  liveUpdate: true,
+	  className: null,
+	  style: null,
+	  labelWidth: '40%'
+	});
+
+	/**
+	 * Common widget for example configuration UI. Uses react-dat-gui on screen, and
+	 * our WebGL dat-gui implementation from `troika-3d-ui` when in XR.
+	 */
+	var ExampleConfigurator = /*@__PURE__*/(function (ParentFacade) {
+	  function ExampleConfigurator () {
+	    ParentFacade.apply(this, arguments);
+	  }
+
+	  if ( ParentFacade ) ExampleConfigurator.__proto__ = ParentFacade;
+	  ExampleConfigurator.prototype = Object.create( ParentFacade && ParentFacade.prototype );
+	  ExampleConfigurator.prototype.constructor = ExampleConfigurator;
+
+	  ExampleConfigurator.prototype.describeChildren = function describeChildren () {
+	    var this$1 = this;
+
+	    if (this.isXR) {
+	      // In XR mode, use our WebGL dat-gui implementation and put it inside
+	      // the wrist-mounted UI container
+	      return {
+	        facade: WristMountedUI,
+	        children: {
+	          facade: BottomAnchoredDatGuiFacade,
+	          scale: 0.75,
+	          maxHeight: 0.48,
+	          overflow: 'scroll',
+	          items: [{
+	            type: 'button',
+	            label: 'Exit XR',
+	            onClick: function () {
+	              this$1.notifyWorld('endXRSession');
+	            }
+	          }].concat(this.items),
+	          data: this.data,
+	          onUpdate: this.onUpdate
+	        }
+	      }
+	    } else {
+	      // On screen, use react-dat-gui to avoid the perspective distortion at the
+	      // screen edge and so we don't have to worry about scaling. Renders into a
+	      // portal element so it isn't position-synced.
+	      return {
+	        facade: HtmlOverlay3DFacade,
+	        html: react.createElement( ReactPortalContainer, null, 
+	          react.createElement( DatGui, { data: this.data, onUpdate: this.onUpdate }, 
+	            this.items.map(function (item, i) {
+	              if (!item) { return null }
+	              item = assign({key: i}, item);
+	              var Cmp = reactCmpMap[item.type];
+	              if (item.type === 'select') {
+	                item.optionLabels = [];
+	                item.options = item.options.map(function (opt) {
+	                  if (opt && typeof opt === 'object') {
+	                    item.optionLabels.push(opt.label || opt.value);
+	                    return opt.value
+	                  } else {
+	                    item.optionLabels.push(opt);
+	                    return opt
+	                  }
+	                });
+	              }
+	              return react.createElement( Cmp, item)
+	            })
+	          )
+	        )
+	      }
+	    }
+	  };
+
+	  return ExampleConfigurator;
+	}(ParentFacade));
+
+	var reactCmpMap = {
+	  boolean: DatBoolean,
+	  button: DatButton,
+	  number: DatNumber,
+	  select: DatSelect
+	};
+
+	// Wrapper for the React version that renders to a portal outside the canvas that isn't
+	// subject to the HTMLOverlay3DFacade's positioning.
+	function ReactPortalContainer(props) {
+	  return reactDom.createPortal(
+	    props.children,
+	    document.getElementById('react-dat-gui-portal')
+	  )
+	}
+
+	// Aligns the DatGuiFacade to put its bottom-center point at its origin.
+	// Should make this a built-in `anchor` config for root `UIBlock3DFacade`s.
+	var BottomAnchoredDatGuiFacade = /*@__PURE__*/(function (DatGuiFacade) {
+	  function BottomAnchoredDatGuiFacade () {
+	    DatGuiFacade.apply(this, arguments);
+	  }
+
+	  if ( DatGuiFacade ) BottomAnchoredDatGuiFacade.__proto__ = DatGuiFacade;
+	  BottomAnchoredDatGuiFacade.prototype = Object.create( DatGuiFacade && DatGuiFacade.prototype );
+	  BottomAnchoredDatGuiFacade.prototype.constructor = BottomAnchoredDatGuiFacade;
+
+	  BottomAnchoredDatGuiFacade.prototype.afterUpdate = function afterUpdate () {
+	    var ref = this;
+	    var offsetWidth = ref.offsetWidth;
+	    var offsetHeight = ref.offsetHeight;
+	    if (offsetWidth && offsetHeight) {
+	      this.x = -offsetWidth / 2 * this.scaleX;
+	      this.y = offsetHeight * this.scaleY + 0.03;
+	    }
+	    DatGuiFacade.prototype.afterUpdate.call(this);
+	  };
+
+	  return BottomAnchoredDatGuiFacade;
+	}(DatGuiFacade));
+
+	function clone(obj) {
+	  var newObj = {};
+	  for (var p in obj) {
+	    if (obj.hasOwnProperty(p)) {
+	      newObj[p] = obj[p];
+	    }
+	  }
+	  return newObj
+	}
+
+	function sample(arr) {
+	  return arr[random(0, arr.length - 1)]
+	}
+
+	function random(min, max) {
+	  return min + Math.floor(Math.random() * (max - min + 1))
+	}
+
+	var CAMERA_UP = {x: 0, y: 0, z: 1};
+	var DROPAWAY_Z = -100;
+
+	var randomThreatLevel = function () { return random(0, 20) ? null : sample(['Low', 'Medium', 'High']); };
+	var randomZoneHeight = function () { return random(1, 10); };
+	var randomHostHeight = function () { return Math.max(1, random(-10, 20)); };
+
+	var CityGrid = /*@__PURE__*/(function (superclass) {
+	  function CityGrid (props) {
+	    superclass.call(this, props);
+	    this.state = {
+	      isLoading: true,
+	      data: null,
+	      cameraElevation: 50,
+	      cameraDistance: 100,
+	      cameraAngle: 0,
+	      cameraLookAt: {x: 0, y: 0, z: 0},
+	      rotatingCamera: false,
+	      enableTransitions: true,
+	      showZoneLabels: false,
+	      hoveredHostIp: null,
+	      selectedHostIp: null
+	    };
+	    this._generateData = this._generateData.bind(this);
+	    this._changeHeights = this._changeHeights.bind(this);
+	    this._changeThreatLevels = this._changeThreatLevels.bind(this);
+	    this._onMouseWheel = this._onMouseWheel.bind(this);
+	    this._gotoRandomCameraPos = this._gotoRandomCameraPos.bind(this);
+	    this._onHostMouseOver = this._onHostMouseOver.bind(this);
+	    this._onHostMouseOut = this._onHostMouseOut.bind(this);
+	    this._onHostClick = this._onHostClick.bind(this);
+	    this._onSceneClick = this._onSceneClick.bind(this);
+	  }
+
+	  if ( superclass ) CityGrid.__proto__ = superclass;
+	  CityGrid.prototype = Object.create( superclass && superclass.prototype );
+	  CityGrid.prototype.constructor = CityGrid;
+
+	  CityGrid.prototype.componentWillMount = function componentWillMount () {
+	    this._generateData();
+	  };
+
+	  CityGrid.prototype._generateData = function _generateData () {
+	    // Mockery
+	    var data = {children: []};
+	    for (var zone = 0; zone < 20; zone++) {
+	      var hostCount = random(10, 150);
+	      var zoneData = {
+	        children: [],
+	        value: hostCount,
+	        height: randomZoneHeight()
+	      };
+	      for (var host = 0; host < hostCount; host++) {
+	        zoneData.children.push({
+	          value: 1,
+	          height: randomHostHeight(),
+	          threatLevel: randomThreatLevel(),
+	          ip: ((random(1, 255)) + "." + (random(1, 255)) + "." + (random(1, 255)) + "." + (random(1, 255)))
+	        });
+	      }
+	      data.children.push(zoneData);
+	    }
+
+	    var layoutSideLength;
+	    var zoneHierarchy = hierarchy(data).sum(function (d) { return d.value; });
+	    layoutSideLength = Math.sqrt(zoneHierarchy.leaves().length) * 3;
+	    var layout = this._treemapLayout || (this._treemapLayout = treemap().padding(2).tile(treemapResquarify));
+	    layout.size([layoutSideLength, layoutSideLength]);
+	    layout(zoneHierarchy);
+
+	    this._hostsChanged = true;
+	    this.setState({
+	      data: data,
+	      layoutSideLength: layoutSideLength,
+	      center: [layoutSideLength / 2, layoutSideLength / 2],
+	      hierarchy: zoneHierarchy,
+	      isLoading: false
+	    });
+	    console.log(("Generated " + (zoneHierarchy.children.length) + " zones with " + (zoneHierarchy.leaves().length) + " hosts"));
+	  };
+
+	  CityGrid.prototype._changeHeights = function _changeHeights () {
+	    var data = clone(this.state.data);
+	    data.children.forEach(function (z) {
+	      z.height = random(1, 10);
+	      z.children.forEach(function (h) {
+	        h.height = randomHostHeight();
+	      });
+	    });
+	    this._hostsChanged = true;
+	    this.setState({data: data});
+	  };
+
+	  CityGrid.prototype._changeThreatLevels = function _changeThreatLevels () {
+	    var data = clone(this.state.data);
+	    data.children.forEach(function (z) {
+	      z.children.forEach(function (h) {
+	        h.threatLevel = randomThreatLevel();
+	      });
+	    });
+	    this._hostsChanged = true;
+	    this.setState({data: data});
+	  };
+
+	  CityGrid.prototype._onMouseWheel = function _onMouseWheel (e) {
+	    var this$1 = this;
+
+	    var ref = e.nativeEvent;
+	    var shiftKey = ref.shiftKey;
+	    var deltaY = ref.deltaY;
+	    e.preventDefault();
+	    this._isWheeling = true;
+	    var after = function () {
+	      this$1._isWheeling = false;
+	    };
+	    if (shiftKey) {
+	      this.setState({cameraElevation: Math.max(1, this.state.cameraElevation + deltaY / 10)}, after);
+	    } else {
+	      this.setState({cameraDistance: Math.max(1, this.state.cameraDistance + deltaY / 5)}, after);
+	    }
+	  };
+
+	  CityGrid.prototype._gotoRandomCameraPos = function _gotoRandomCameraPos () {
+	    this.setState({
+	      cameraElevation: random(1, 200),
+	      cameraDistance: random(1, 200),
+	      cameraAngle: this.state.cameraAngle + random(-Math.PI / 2, Math.PI / 2)
+	    });
+	  };
+
+	  CityGrid.prototype._onHostMouseOver = function _onHostMouseOver (e) {
+	    this._hostsChanged = true;
+	    this.setState({hoveredHostIp: e.target.ip});
+	  };
+
+	  CityGrid.prototype._onHostMouseOut = function _onHostMouseOut (e) {
+	    this._hostsChanged = true;
+	    this.setState({hoveredHostIp: null});
+	  };
+
+	  CityGrid.prototype._onHostClick = function _onHostClick (e) {
+	    this._hostsChanged = true;
+	    this.setState({selectedHostIp: e.target.ip});
+	  };
+
+	  CityGrid.prototype._onSceneClick = function _onSceneClick (e) {
+	    this._hostsChanged = true;
+	    this.setState({selectedHostIp: null});
+	  };
+
+	  CityGrid.prototype.render = function render () {
 	    var this$1 = this;
 
 	    var ref = this;
 	    var props = ref.props;
 	    var state = ref.state;
-	    var vr = props.vr;
-	    var rootTransform = vr ? state.cameraVrOrigin : INIT_ORIGIN;
-	    var tab = TABS.find(function (d) { return d.key === state.tab; });
+	    var zoneHierarchy = state.hierarchy;
+	    var hostsChanged = this._hostsChanged;
+	    this._hostsChanged = false;
 
-	    return react.createElement( 'div', null, 
-	      react.createElement( Canvas3D, {
-	        antialias: true, backgroundColor: 0, stats: props.stats, width: props.width, height: props.height, camera: {
-	          z: vr ? 0 : 0.5
-	        }, lights: [
-	          {type: 'point', x: 1},
-	          {type: 'point', x: -1}
-	        ], objects: [
-	          Object.assign({}, rootTransform, {
-	            key: 'root',
-	            facade: Group3DFacade,
-	            children: [
-	              react.createElement( Block, {
-	                key: "uiRoot", flexDirection: "column", alignItems: "center", fontSize: 20, width: 1280, scale: 1 / 640, x: -1, y: 0.3, z: -1.4 }, 
-	                react.createElement( Block, {
-	                  key: "topRow", height: 320, flexDirection: "row" }, 
-	                  react.createElement( Block, {
-	                    key: "titleAndDesc", backgroundMaterial: backdropMaterial, backgroundColor: 0x333333, flexDirection: "column", alignItems: "stretch", width: 320, rotateY: Math.PI / 8, z: 320 * Math.sin(Math.PI / 8), left: 320 - 320 * Math.cos(Math.PI / 8) }, 
-	                    react.createElement( Block, {
-	                      backgroundMaterial: backdropMaterial, backgroundColor: 0x444444, fontSize: 30, padding: [10, 20] }, tab.title), 
-	                    react.createElement( Block, { padding: 20, flex: 1, overflow: "scroll" }, 
-	                      tab.desc
-	                    )
-	                  ), 
-
-	                  react.createElement( Block, {
-	                    key: "backdrop", width: 640, backgroundMaterial: backdropMaterial, backgroundColor: 0x333333 }), 
-
-	                  react.createElement( Block, {
-	                    key: "options", backgroundMaterial: backdropMaterial, backgroundColor: 0x333333, flexDirection: "column", width: 320, rotateY: -Math.PI / 8, padding: 20 }, 
-	                    tab.key === 'colors' ? (
-	                        state.selectedColor == null ? null : [
-	                          react.createElement( Block, { key: "title", margin: [20, 0] }, "Selected Color:"),
-	                          react.createElement( Block, { key: "info", flex: 1, flexDirection: "row", alignItems: "center" }, 
-	                            react.createElement( Block, {
-	                              key: "swatch", width: 64, height: 64, backgroundColor: state.selectedColor, borderWidth: 2, borderColor: 0xffffff, margin: [0, 10, 0, 0], z: 50 }), 
-	                            react.createElement( Block, { fontSize: 30 }, '#' + new Color(state.selectedColor).getHexString())
-	                          ),
-	                          buttonDef({
-	                            key: 'back',
-	                            onClick: this._onSelectColor.bind(this, null),
-	                            margin: [10, 5],
-	                            alignSelf: "flex-start",
-	                            fontSize: 24,
-	                            icon: 'arrow_back',
-	                            text: 'Back'
-	                          })
-	                        ]
-	                      ) : tab.key === 'globe' ? (
-	                        [
-	                          react.createElement( Block, { key: "title", margin: [20, 0] }, "Choose a Texture:")
-	                        ].concat(GLOBE_TEXTURES.map(function (d, i) { return react.createElement( Block, {
-	                            key: i, flexDirection: "row", alignItems: "center", padding: [4, 0], color: 0xffffff, pointerStates: {hover: {color: 0x00ccff}}, onClick: this$1._onSelectGlobeTexture.bind(this$1, d) }, 
-	                            react.createElement( MaterialIconFacade, { icon: 'radio_button_' + (d === state.globeTexture ? 'checked' : 'unchecked') }), " ", d.title
-	                          ); }
-	                        ))
-	                      ) : tab.key === 'graph' ? (
-	                        buttonDef({
-	                          onClick: this._randomizeGraphData,
-	                          fontSize: 24,
-	                          text: 'Randomize Data'
-	                        })
-	                      ) : ''
-	                  )
-
-	                ), 
-
-	                react.createElement( Block, {
-	                  key: "mainStage", width: 640, height: 640, rotateX: mainStageAngle, borderWidth: 3, borderColor: 0x999999, borderRadius: [0, 0, 10, 10] }
-	                  /*<Block
-	                    key={tab.key}
-	                    flex={1}
-	                    animation={stageEnterAnim}
-	                    exitAnimation={stageExitAnim}
-	                  >*/, 
-	                    tab.key === 'colors' ? (
-	                        react.createElement( ColorCubes, {
-	                          flex: 1, margin: 180, z: 120, selectedColor: state.selectedColor, onSelectColor: this._onSelectColor, animation: {
-	                            from: {scale: 0.001},
-	                            to: {scale: 1},
-	                            easing: 'easeOutExpo'
-	                          } })
-	                      ) : tab.key === 'globe' ? (
-	                        react.createElement( FlexboxGlobe$1, {
-	                          flex: 1, margin: 150, z: 120, rotateX: -mainStageAngle, scaleX: 1, scaleZ: 1, scaleY: state.globeTexture.url.indexOf('pumpkin') > -1 ? 0.6 : 1, texture: state.globeTexture.texture, animation: globeAnim, transition: {scaleY: true, scaleX: true, scaleZ: true} })
-	                      ) : tab.key === 'graph' ? (
-	                        state.graphData.map(function (d, i, all) { return react.createElement( FlexboxLineGraph$1, {
-	                            key: i, flex: 1, margin: [10, 0], color: d.color, values: d.values, animation: {
-	                              from: {rotateX: 0, z: 0},
-	                              to: {rotateX: -mainStageAngle, z: (all.length - i - 1) * 20},
-	                              duration: 750,
-	                              delay: (all.length - i - 1) * 100,
-	                              easing: 'easeOutExpo'
-	                            } }); }
-	                        )
-	                      ) : ''
-	                  /*</Block>*/
-	                ), 
-
-	                react.createElement( Block, {
-	                  key: "tabs", flexDirection: "row", justifyContent: "center", width: 640, z: -Math.sin(mainStageAngle) * 640, top: -640 + 640 * Math.cos(mainStageAngle), rotateX: -Math.PI / 4 }, 
-	                  TABS.map(function (d) {
-	                      var active = state.tab === d.key;
-	                      return buttonDef({
-	                        key: d.key,
-	                        id: d.key,
-	                        onClick: this$1._onTabClick,
-	                        margin: [10, 5],
-	                        fontSize: 15,
-	                        backgroundColor: active ? 0x00ccff : 0x666666,
-	                        pointerEvents: !active,
-	                        z: active ? 10 : 0,
-	                        text: d.title
-	                      })
-	                    })
-	                ), 
-
-	                vr ? buttonDef({
-	                  onClick: this._onRecenterViewClick,
-	                  icon: 'sync',
-	                  text: 'Recenter View',
-	                  alignSelf: 'center',
-	                  backgroundColor: 0,
-	                  color: 0x333333,
-	                  fontSize: 24,
-	                  rotateX: -Math.PI / 4,
-	                  pointerStates: {
-	                    hover: {
-	                      backgroundColor: 0x666666,
-	                      color: 0xffffff
+	    return (
+	      react.createElement( 'div', { className: 'the_grid', onWheel: this._onMouseWheel }, 
+	        state.data ? (
+	          react.createElement( Canvas3D, {
+	            stats: this.props.stats, width: props.width, height: props.height, antialias: true, backgroundColor: 0x222222, lights: [
+	              {
+	                type: 'ambient',
+	                color: 0xffffff,
+	                intensity: 0.8
+	              },
+	              {
+	                type: 'point',
+	                x: 0,
+	                y: 0,
+	                z: 200,
+	                color: 0xffffff,
+	                intensity: 1
+	              }
+	            ], camera: {
+	              facade: GridCamera,
+	              aspect: props.width / props.height,
+	              elevation: state.cameraElevation,
+	              angle: state.cameraAngle,
+	              distance: state.cameraDistance,
+	              lookAt: state.cameraLookAt,
+	              up: CAMERA_UP,
+	              transition: state.enableTransitions && !this._isWheeling ? {
+	                angle: !state.rotatingCamera,
+	                distance: 1,
+	                elevation: 1
+	              } : null,
+	              animation: state.rotatingCamera ? {
+	                0: {angle: state.cameraAngle},
+	                100: {angle: state.cameraAngle + Math.PI * 2},
+	                duration: 30000,
+	                iterations: Infinity
+	              } : null
+	            }, fog: {
+	              color: 0x222222,
+	              density: 0.003
+	            }, objects: [
+	              {
+	                key: 'main',
+	                facade: Group3DFacade,
+	                x: -state.center[0],
+	                y: -state.center[1],
+	                z: 0,
+	                children: [
+	                  {
+	                    key: 'ground',
+	                    facade: Ground,
+	                    width: state.layoutSideLength,
+	                    height: state.layoutSideLength,
+	                    z: state.selectedHostIp ? DROPAWAY_Z : 0,
+	                    transition: state.enableTransitions && {
+	                      width: true,
+	                      height: true,
+	                      z: {delay: state.selectedHostIp ? 0 : 1000}
+	                    }
+	                  },
+	                  {
+	                    key: 'hosts',
+	                    facade: List,
+	                    data: zoneHierarchy.leaves(),
+	                    shouldUpdateChildren: function () { return hostsChanged; },
+	                    template: {
+	                      key: function (host, i) { return ("host" + i); },
+	                      facade: Host,
+	                      ip: function (host) { return host.data.ip; },
+	                      x: function (host) { return host.x0; },
+	                      y: function (host) { return host.y0; },
+	                      z: state.selectedHostIp ? function (host) { return host.data.ip === state.selectedHostIp ? 0 : DROPAWAY_Z; } : 0,
+	                      rotateZ: 0,
+	                      height: function (host) { return host.data.height; },
+	                      threatLevel: function (host) { return host.data.threatLevel; },
+	                      transition: state.enableTransitions ? function (host, i, arr) {
+	                        var tx = {
+	                          delay: host.data.ip === state.selectedHostIp ? 0 : Math.round(1000 * i / arr.length)
+	                        };
+	                        return {
+	                          x: tx,
+	                          y: tx,
+	                          z: tx,
+	                          height: tx,
+	                          rotateZ: true
+	                        }
+	                      } : null,
+	                      animation: function (host) { return host.data.ip === state.hoveredHostIp ? [
+	                        {
+	                          0: {rotateZ: 0},
+	                          100: {rotateZ: Math.PI / 2},
+	                          duration: 500,
+	                          iterations: Infinity
+	                        },
+	                        {
+	                          0: {height: host.data.height},
+	                          50: {height: host.data.height + 1},
+	                          100: {height: host.data.height},
+	                          duration: 1000,
+	                          delay: 1000,
+	                          easing: 'easeOutBounce',
+	                          iterations: Infinity
+	                        }
+	                      ] : null; },
+	                      highlight: function (host) { return host.data.ip === state.hoveredHostIp; },
+	                      onMouseOver: function () { return this$1._onHostMouseOver; },
+	                      onMouseOut: function () { return this$1._onHostMouseOut; },
+	                      onClick: function () { return this$1._onHostClick; }
+	                    }
+	                  },
+	                  {
+	                    key: 'zones',
+	                    facade: List,
+	                    data: zoneHierarchy.children,
+	                    template: {
+	                      key: function (zone, i) { return ("zone" + i); },
+	                      facade: Zone,
+	                      x: function (zone) { return zone.x0; },
+	                      y: function (zone) { return zone.y0; },
+	                      z: function (zone) { return state.selectedHostIp ? DROPAWAY_Z : 0; },
+	                      width: function (zone) { return zone.x1 - zone.x0; },
+	                      length: function (zone) { return zone.y1 - zone.y0; },
+	                      height: function (zone) { return zone.data.height; },
+	                      label: state.showZoneLabels ? function (zone, i) { return ("Zone " + i); } : null,
+	                      transition: state.enableTransitions ? function (zone, i, arr) {
+	                        var tx = {
+	                          delay: Math.round(1000 * i / arr.length)
+	                        };
+	                        return {
+	                          x: tx,
+	                          y: tx,
+	                          z: tx,
+	                          width: tx,
+	                          length: tx,
+	                          height: tx
+	                        }
+	                      } : null
 	                    }
 	                  }
-	                }) : null
-	              )
-	            ]
-	          })
-	        ] })
+	                ]
+	              },
+	              {
+	                key: 'config',
+	                isXR: !!this.props.vr,
+	                facade: ExampleConfigurator,
+	                data: state,
+	                onUpdate: this.setState.bind(this),
+	                items: [
+	                  {type: 'button', onClick: this._changeHeights, label: 'Change Heights'},
+	                  {type: 'button', onClick: this._changeThreatLevels, label: 'Change Threats'},
+	                  {type: 'button', onClick: this._generateData, label: 'Regen Full'},
+	                  {type: 'button', onClick: this._gotoRandomCameraPos, label: 'Random Camera Pos'},
+	                  {type: 'boolean', path: 'rotatingCamera', label: 'Rotate'},
+	                  {type: 'boolean', path: 'enableTransitions', label: 'Transitions'},
+	                  {type: 'boolean', path: 'showZoneLabels', label: 'Zone Labels'}
+	                ]
+	              }
+	            ], onBackgroundClick: this._onSceneClick })
+	        ) : null
+	      )
 	    )
 	  };
 
-	  return UIExample;
+	  return CityGrid;
 	}(react.Component));
 
+	CityGrid.displayName = 'CityGrid';
 
-	function buttonDef(props) {
-	  return Object.assign({
-	    facade: Block,
-	    padding: [5, 10],
-	    borderRadius: 5,
-	    flexDirection: "row",
-	    alignItems: "center",
-	    justifyContent: 'center',
-	    backgroundColor: 0x00ccff,
-	    pointerStates: {
-	      hover: {
-	        backgroundColor: 0x0099cc
-	      }
-	    },
-	    transition: {
-	      z: true,
-	      color: {interpolate: 'color'},
-	      backgroundColor: {interpolate: 'color'}
-	    },
-	    children: [
-	      props.icon ? react.createElement( MaterialIconFacade, { icon: props.icon }) : null,
-	      props.text
-	    ]
-	  }, props, {text: null, icon: null})
-	}
+	CityGrid.propTypes = {
+	  width: propTypes.number,
+	  height: propTypes.number
+	};
 
 	function styleInject(css, ref) {
 	  if ( ref === void 0 ) { ref = {}; }
@@ -61388,7 +77218,7 @@
 	styleInject(css_248z$1);
 
 	var EXAMPLES = [
-	  { id: 'ui', name: 'User Interface', component: UIExample } ];
+	  { id: 'citygrid', name: 'City', component: CityGrid, disableXR: true } ];
 
 	var ExamplesApp = /*@__PURE__*/(function (superclass) {
 	  function ExamplesApp(props) {
@@ -61468,7 +77298,7 @@
 	    var example = EXAMPLES.filter(function (ref) {
 	      var id = ref.id;
 
-	      return id === 'ui';
+	      return id === 'citygrid';
 	    })[0];
 	    var ExampleCmp = example && example.component;
 
