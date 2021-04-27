@@ -2,14 +2,14 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import { ReactXRAware } from 'troika-xr'
 import HtmlOverlays from './html-overlays/HtmlOverlaysExample'
-import UIExample from './ui2/UIExample'
-
+import CityGrid from './citygrid/CityGrid'
 import 'react-dat-gui/dist/index.css'
 import './index.css'
 
 
 const EXAMPLES = [
-  { id: 'ui', name: 'User Interface', component: UIExample },
+  { id: 'citygrid', name: 'City', component: CityGrid, disableXR: true }, //fps too low for vr, too many draw calls
+
 ]
 
 class ExamplesApp extends React.Component {
@@ -73,7 +73,7 @@ class ExamplesApp extends React.Component {
 
   render() {
     let { selectedExampleId, bodyWidth, bodyHeight, stats } = this.state
-    let example = EXAMPLES.filter(({ id }) => id === 'ui')[0]
+    let example = EXAMPLES.filter(({ id }) => id === 'citygrid')[0]
     let ExampleCmp = example && example.component
 
     return (
